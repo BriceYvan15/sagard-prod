@@ -1,0 +1,1808 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ══════════════════════════════════════════════════════════
+//  ENUMS
+// ══════════════════════════════════════════════════════════
+
+enum Role {
+  DIRECTEUR_GENERAL
+  COMMERCIAL
+  COMPTABLE
+  RH
+  CHEF_OPERATIONS
+  CONTROLEUR
+  TECHNICIENNE_SURFACE
+  AGENT_ACCUEIL
+  AGENT_TERRAIN
+  CLIENT
+}
+
+enum UserStatus {
+  ACTIF
+  INACTIF
+  SUSPENDU
+}
+
+enum ClientStatus {
+  PROSPECT
+  ACTIF
+  INACTIF
+  SUSPENDU
+}
+
+enum ContractStatus {
+  BROUILLON
+  DEVIS
+  PROFORMA
+  CONFIRME
+  ACTIF
+  SUSPENDU
+  RESILIE
+  EXPIRE
+}
+
+enum ContractType {
+  GARDIENNAGE_STATIQUE
+  PATROUILLE_MOBILE
+  PROTECTION_RAPPROCHEE
+  SECURITE_EVENEMENTIELLE
+  TRANSPORT_FONDS
+  TELESURVEILLANCE
+  MIXTE
+}
+
+enum InvoicingFrequency {
+  MENSUELLE
+  TRIMESTRIELLE
+  SEMESTRIELLE
+  ANNUELLE
+}
+
+enum ClientSegment {
+  RESIDENTIEL
+  COMMERCIAL
+  INDUSTRIEL
+  BANQUE_FINANCE
+  AMBASSADE_DIPLOMATIQUE
+  EVENEMENTIEL
+  ADMINISTRATION_PUBLIQUE
+  PARTICULIER
+  ENTREPRISE_PRIVEE
+  INSTITUTION_PUBLIQUE
+  ONG
+  AMBASSADE
+  AUTRE
+}
+
+enum ShiftCount {
+  ONE
+  TWO
+  THREE
+}
+
+enum InvoiceStatus {
+  BROUILLON
+  ENVOYEE
+  ACCEPTEE
+  PAYEE
+  RETARD
+  ANNULEE
+}
+
+enum InvoiceType {
+  FACTURE
+  PROFORMA
+  DEVIS
+  AVOIR
+}
+
+enum AgentStatus {
+  DISPONIBLE
+  EN_POSTE
+  EN_CONGE
+  EN_FORMATION
+  INACTIF
+  RECRUTE
+}
+
+enum ShiftType {
+  JOUR
+  NUIT
+  MIXTE
+}
+
+enum PointageStatus {
+  EN_COURS
+  TERMINE
+  PRESENT
+  ABSENT
+  RETARD
+  JUSTIFIE
+  REMPLACE
+  CONGE
+}
+
+enum SiteType {
+  VILLA
+  IMMEUBLE
+  ENTREPOT
+  USINE
+  BUREAU
+  COMMERCE
+  BANQUE
+  CHANTIER
+  AUTRE
+}
+
+enum DeploymentRole {
+  AGENT
+  CHEF_POSTE
+  SUPERVISEUR
+  CONTROLEUR
+  MAITRE_CHIEN
+  PROTECTION_RAPPROCHEE
+}
+
+enum DeploymentShift {
+  JOUR
+  NUIT
+  FULL
+}
+
+enum DeploymentState {
+  BROUILLON
+  ACTIF
+  REMPLACE
+  TERMINE
+}
+
+enum PointingMethod {
+  MANUEL
+  CONTROLEUR
+  MOBILE
+  BIOMETRIQUE
+}
+
+enum PatrolRoundState {
+  EN_COURS
+  TERMINEE
+  INCOMPLETE
+  INTERROMPUE
+}
+
+// —— Lot 2 : Supervision
+enum ControlVisitType {
+  ROUTINE
+  INOPINEE
+  ALERTE
+  RELEVE
+  ESCORTE
+}
+
+enum ControlVisitState {
+  BROUILLON
+  EFFECTUEE
+  REPORTEE
+  ANNULEE
+}
+
+enum DailyReportShift {
+  JOUR
+  NUIT
+  FULL
+}
+
+enum DailyReportState {
+  BROUILLON
+  SOUMIS
+  VALIDE
+  REJETE
+}
+
+enum WeatherCondition {
+  DEGAGE
+  NUAGEUX
+  PLUVIEUX
+  ORAGEUX
+  BROUILLARD
+}
+
+enum IncidentType {
+  INTRUSION
+  VOL
+  AGRESSION
+  INCENDIE
+  VANDALISME
+  MEDICAL
+  TECHNIQUE
+  FAUTE_AGENT
+  FAUSSE_ALERTE
+  AUTRE
+}
+
+enum IncidentSeverity {
+  FAIBLE
+  MOYEN
+  ELEVE
+  CRITIQUE
+}
+
+enum IncidentState {
+  OUVERT
+  INVESTIGATION
+  RESOLU
+  CLOS
+}
+
+enum AlertType {
+  SOS
+  INTRUSION
+  INCENDIE
+  MEDICAL
+  RENFORT
+  TECHNIQUE
+  TEST
+}
+
+enum AlertSeverity {
+  INFO
+  WARNING
+  CRITIQUE
+}
+
+enum AlertState {
+  NOUVELLE
+  PRISE_EN_COMPTE
+  INTERVENTION
+  RESOLUE
+  FAUSSE
+}
+
+enum SiteStatus {
+  ACTIF
+  INACTIF
+  SUSPENDU
+}
+
+// —— Lot 3 : Registres site
+enum VisitPurpose {
+  REUNION
+  LIVRAISON
+  MAINTENANCE
+  CLIENT
+  FAMILLE
+  CANDIDATURE
+  ENTRETIEN
+  AUTRE
+}
+
+enum IdDocType {
+  CNI
+  PASSEPORT
+  PERMIS
+  BADGE
+  AUTRE
+}
+
+enum KeyType {
+  PRINCIPALE
+  MASTER
+  ARMOIRE
+  VEHICULE
+  PORTE
+  PORTAIL
+  AUTRE
+}
+
+enum KeyState {
+  DISPONIBLE
+  SORTIE
+  PERDUE
+}
+
+enum KeyMovementType {
+  SORTIE
+  RETOUR
+  PERTE
+}
+
+enum EquipmentCategory {
+  TENUE
+  ARME_FEU
+  ARME_NON_LETALE
+  RADIO
+  DETECTEUR
+  LAMPE
+  PROTECTION
+  TELEPHONE
+  CANIN
+  CLE
+  ACCESSOIRE_VEHICULE
+  AUTRE
+}
+
+enum EquipmentState {
+  EN_STOCK
+  ATTRIBUE
+  EN_MAINTENANCE
+  PERDU
+  ENDOMMAGE
+  REFORME
+}
+
+enum EquipmentMovementType {
+  ATTRIBUTION
+  RETOUR
+  TRANSFERT
+  MAINTENANCE
+  PERTE
+}
+
+enum EquipmentCondition {
+  NEUF
+  BON
+  USE
+  ENDOMMAGE
+}
+
+enum BlacklistReason {
+  VOL
+  AGRESSION
+  INTRUSION
+  DECISION_JUSTICE
+  DEMANDE_CLIENT
+  AUTRE
+}
+
+// —— Lot 4 : CRM Prospects
+enum LeadServiceType {
+  GARDIENNAGE_STATIQUE
+  PATROUILLE_MOBILE
+  PROTECTION_RAPPROCHEE
+  SECURITE_EVENEMENTIELLE
+  TRANSPORT_FONDS
+  TELESURVEILLANCE
+  CANINE
+  MIXTE
+  INSTALLATION_CAMERAS
+}
+
+enum LeadStage {
+  NOUVEAU
+  QUALIFIE
+  PROPOSITION
+  NEGOCIATION
+  GAGNE
+  PERDU
+}
+
+enum LeadSource {
+  SITE_WEB
+  APPEL_ENTRANT
+  RECOMMANDATION
+  SALON
+  DEMARCHAGE
+  RESEAU_SOCIAL
+  PARTENAIRE
+  AUTRE
+}
+
+enum LeadPriority {
+  BASSE
+  NORMALE
+  HAUTE
+  URGENTE
+}
+
+enum RiskLevel {
+  FAIBLE
+  MOYEN
+  ELEVE
+  CRITIQUE
+}
+
+enum EquipmentStatus {
+  DISPONIBLE
+  EN_SERVICE
+  EN_MAINTENANCE
+  HORS_SERVICE
+  PERDU
+}
+
+enum VehicleType {
+  MOTO
+  VOITURE
+  CAMION
+}
+
+enum VehicleStatus {
+  DISPONIBLE
+  EN_SERVICE
+  EN_MAINTENANCE
+  HORS_SERVICE
+}
+
+enum NotificationType {
+  ASSIGNATION
+  FACTURE_RETARD
+  EXPIRATION_CONTRAT
+  EQUIPEMENT
+  RECLAMATION
+  POINTAGE
+  RECRUTEMENT
+  INCIDENT
+  SYSTEME
+  COMMERCIAL
+}
+
+enum NotificationChannel {
+  IN_APP
+  WHATSAPP
+  SMS
+  EMAIL
+}
+
+enum ComplaintStatus {
+  OUVERTE
+  EN_COURS
+  RESOLUE
+  FERMEE
+}
+
+enum RecruitmentStatus {
+  CANDIDATURE
+  ENTRETIEN
+  TEST
+  ACCEPTE
+  REFUSE
+  EMBAUCHE
+}
+
+enum EducationLevel {
+  SANS_DIPLOME
+  CEPE
+  BEPC
+  BAC
+  BTS_DUT
+  LICENCE
+  MASTER
+  DOCTORAT
+  AUTRE
+}
+
+enum EmploymentContractType {
+  CDD
+  CDI
+  ESSAI
+  STAGE
+  JOURNALIER
+}
+
+enum DisciplinaryType {
+  FAUTE
+  AVERTISSEMENT
+  MISE_A_PIED
+  LICENCIEMENT
+}
+
+enum IntegrationStepType {
+  ENTRETIEN_EMBAUCHE
+  FORMATION_FCB
+  FORMATION_REGLEMENT
+  FORMATION_SERVICE_POSTE
+  SIGNATURE_CONTRAT
+  MISE_EN_SERVICE
+}
+
+enum BehaviorRating {
+  EXEMPLAIRE
+  BON
+  NORMAL
+  INDISCIPLINE
+}
+
+enum LeaveType {
+  CONGE_ANNUEL
+  MALADIE
+  MATERNITE
+  PATERNITE
+  SANS_SOLDE
+  FORMATION
+}
+
+enum LeaveStatus {
+  EN_ATTENTE
+  APPROUVE
+  REFUSE
+  ANNULE
+}
+
+enum PayrollStatus {
+  BROUILLON
+  CALCULE
+  VALIDE
+  PAYE
+}
+
+// ══════════════════════════════════════════════════════════
+//  USERS & AUTH
+// ══════════════════════════════════════════════════════════
+
+model User {
+  id            String     @id @default(uuid())
+  email         String     @unique
+  phone         String     @unique
+  passwordHash  String
+  role          Role
+  status        UserStatus @default(ACTIF)
+  firstName     String
+  lastName      String
+  photoUrl      String?
+  whatsappPhone String?
+  lastLoginAt   DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  agent          Agent?
+  client         ClientContact?
+  notifications  Notification[]
+  auditLogs      AuditLog[]
+  sessions       UserSession[]
+
+  @@map("users")
+}
+
+model UserSession {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token        String   @unique
+  deviceInfo   String?
+  ipAddress    String?
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  @@map("user_sessions")
+}
+
+// ══════════════════════════════════════════════════════════
+//  CRM — CLIENTS & CONTRATS
+// ══════════════════════════════════════════════════════════
+
+model Client {
+  id            String       @id @default(uuid())
+  code          String?      @unique
+  name          String
+  legalName     String?
+  segment       ClientSegment @default(AUTRE)
+  sector        String?
+  taxId         String?      @unique
+  rccm          String?      // Registre du Commerce et du Crédit Mobilier
+  ncc           String?      // Numéro de Compte Contribuable
+  vat           String?
+  contactFirstName String?
+  contactLastName  String?
+  cniNumber     String?      // N° CNI / Passeport du contact principal
+  // Coordonnées directes (comme res.partner)
+  phone         String?
+  phone2        String?      // Contact 2
+  mobile        String?
+  email         String?
+  website       String?
+  // Adresse
+  address       String
+  street2       String?
+  zip           String?
+  city          String
+  district      String?      // Commune
+  quartier      String?      // Quartier
+  country       String?      @default("Côte d'Ivoire")
+  // Coordonnées GPS
+  latitude      Float?
+  longitude     Float?
+  notes         String?
+  status        ClientStatus @default(PROSPECT)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  createdById   String?
+
+  contacts      ClientContact[]
+  contracts     ClientContract[]
+  sites         Site[]
+  invoices      Invoice[]
+  complaints    Complaint[]
+  history       ClientHistory[]
+  leads         CrmLead[]
+
+  @@map("clients")
+}
+
+model ClientContact {
+  id          String   @id @default(uuid())
+  clientId    String
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  userId      String?  @unique
+  user        User?    @relation(fields: [userId], references: [id])
+  firstName   String
+  lastName    String
+  email       String?
+  phone       String
+  whatsapp    String?
+  position    String?
+  isPrimary   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  sitesOnSite Site[]   @relation("SiteContact")
+
+  @@map("client_contacts")
+}
+
+model ClientHistory {
+  id          String   @id @default(uuid())
+  clientId    String
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  action      String
+  details     String?
+  performedBy String
+  createdAt   DateTime @default(now())
+
+  @@map("client_history")
+}
+
+// (relation back to AgentDeployment via DeploymentContract)
+model ClientContract {
+  id                  String         @id @default(uuid())
+  reference           String         @unique
+  title               String?
+  clientId            String
+  client              Client         @relation(fields: [clientId], references: [id])
+  contractType        ContractType   @default(GARDIENNAGE_STATIQUE)
+  type                String?
+  description         String?
+  signatureDate       DateTime?
+  startDate           DateTime
+  endDate             DateTime?
+  durationMonths      Int?
+  autoRenew           Boolean        @default(false)
+  noticeDays          Int            @default(30)
+  monthlyAmount       Decimal        @db.Decimal(15, 2)
+  setupAmount         Decimal        @db.Decimal(15, 2) @default(0)
+  currency            String         @default("XOF")
+  invoicingFrequency  InvoicingFrequency @default(MENSUELLE)
+  paymentTermDays     Int            @default(30)
+  nbAgentsRequired    Int            @default(0)
+  nbShifts            ShiftCount     @default(ONE)
+  nbHoursMonth        Float?
+  // Site principal (en plus des SiteContract m2m)
+  siteId              String?
+  site                Site?          @relation("ContractMainSite", fields: [siteId], references: [id])
+  // Chargé d'affaires (commercial)
+  assignedUserId      String?
+  status              ContractStatus @default(BROUILLON)
+  documentUrl         String?
+  createdById         String?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  sites               SiteContract[]
+  invoices            Invoice[]
+  history             ContractHistory[]
+  deployments         AgentDeployment[] @relation("DeploymentContract")
+
+  @@map("client_contracts")
+}
+
+model ContractHistory {
+  id          String         @id @default(uuid())
+  contractId  String
+  contract    ClientContract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  action      String
+  details     String?
+  performedBy String
+  createdAt   DateTime       @default(now())
+
+  @@map("contract_history")
+}
+
+// ══════════════════════════════════════════════════════════
+//  SITES
+// ══════════════════════════════════════════════════════════
+
+model Site {
+  id                String     @id @default(uuid())
+  code              String?    @unique
+  name              String
+  clientId          String
+  client            Client     @relation(fields: [clientId], references: [id])
+  contactId         String?
+  contact           ClientContact? @relation("SiteContact", fields: [contactId], references: [id])
+  address           String
+  city              String
+  district          String?
+  country           String?    @default("Côte d'Ivoire")
+  latitude          Float?
+  longitude         Float?
+  siteType          SiteType   @default(VILLA)
+  surface           Float?
+  riskLevel         RiskLevel  @default(MOYEN)
+  nbAgentsRequired  Int        @default(1)
+  nbShifts          ShiftCount @default(ONE)
+  hasArmed          Boolean    @default(false)
+  hasCanine         Boolean    @default(false)
+  status            SiteStatus @default(ACTIF)
+  instructions      String?
+  notes             String?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  contracts         SiteContract[]
+  mainContracts     ClientContract[]   @relation("ContractMainSite")
+  deployments       AgentDeployment[]
+  patrols           ControllerPatrol[]
+  patrolPoints      PatrolPoint[]
+  patrolRounds      PatrolRound[]
+  dailyReports      DailyReport[]
+  incidents         Incident[]
+  visitorLogs       VisitorLog[]
+  keys              Key[]
+  siteEquipments    SiteEquipment[]
+  blacklists        BlacklistSite[]
+
+  @@map("sites")
+}
+
+model SiteContract {
+  id         String         @id @default(uuid())
+  siteId     String
+  site       Site           @relation(fields: [siteId], references: [id])
+  contractId String
+  contract   ClientContract @relation(fields: [contractId], references: [id])
+  startDate  DateTime
+  endDate    DateTime?
+
+  @@map("site_contracts")
+}
+
+// ══════════════════════════════════════════════════════════
+//  FACTURATION & LOTS DE FACTURATION
+// ══════════════════════════════════════════════════════════
+
+enum BillingRunState {
+  BROUILLON
+  EXECUTE
+  ANNULE
+}
+
+model BillingRun {
+  id                  String         @id @default(uuid())
+  reference           String         @unique
+  period              String         // ex. "2026-05"
+  invoiceDate         DateTime
+  invoicingFrequency  InvoicingFrequency @default(MENSUELLE)
+  state               BillingRunState @default(BROUILLON)
+  totalAmount         Decimal        @db.Decimal(15, 2) @default(0)
+  currency            String         @default("XOF")
+  notes               String?
+  createdById         String?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  invoices            Invoice[]
+
+  @@map("billing_runs")
+}
+
+model Invoice {
+  id              String        @id @default(uuid())
+  reference       String        @unique
+  type            InvoiceType   @default(FACTURE)
+  clientId        String?
+  client          Client?       @relation(fields: [clientId], references: [id])
+  leadId          String?
+  lead            CrmLead?      @relation(fields: [leadId], references: [id])
+  contractId      String?
+  contract        ClientContract? @relation(fields: [contractId], references: [id])
+  billingRunId    String?
+  billingRun      BillingRun?   @relation(fields: [billingRunId], references: [id])
+  issueDate       DateTime      @default(now())
+  dueDate         DateTime
+  deliveryDate    DateTime?
+  status          InvoiceStatus @default(BROUILLON)
+  currency        String        @default("XOF")
+  subtotal        Decimal       @db.Decimal(15, 2)
+  taxRate         Decimal       @db.Decimal(5, 2) @default(0)
+  taxAmount       Decimal       @db.Decimal(15, 2) @default(0)
+  totalAmount     Decimal       @db.Decimal(15, 2)
+  paidAt          DateTime?
+  paidAmount      Decimal?      @db.Decimal(15, 2)
+  notes           String?
+  qrCodeData      String?
+  createdById     String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  lines           InvoiceLine[]
+  payments        Payment[]
+  history         InvoiceHistory[]
+  notifications   Notification[]
+
+  @@map("invoices")
+}
+
+model InvoiceLine {
+  id          String  @id @default(uuid())
+  invoiceId   String
+  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  code        String
+  description String
+  details     String?
+  quantity    Decimal @db.Decimal(10, 2)
+  unitPrice   Decimal @db.Decimal(15, 2)
+  discount    Decimal @db.Decimal(5, 2) @default(0)
+  total       Decimal @db.Decimal(15, 2)
+
+  @@map("invoice_lines")
+}
+
+model Payment {
+  id          String   @id @default(uuid())
+  invoiceId   String
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id])
+  amount      Decimal  @db.Decimal(15, 2)
+  currency    String   @default("XOF")
+  method      String
+  reference   String?
+  paidAt      DateTime @default(now())
+  recordedBy  String?
+  notes       String?
+
+  @@map("payments")
+}
+
+model InvoiceHistory {
+  id          String   @id @default(uuid())
+  invoiceId   String
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  action      String
+  details     String?
+  performedBy String
+  createdAt   DateTime @default(now())
+
+  @@map("invoice_history")
+}
+
+// ══════════════════════════════════════════════════════════
+//  CATALOGUE DE SERVICES (désignations factures/devis)
+// ══════════════════════════════════════════════════════════
+
+model ServiceCatalog {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  description String
+  unitPrice   Decimal? @db.Decimal(15, 2)
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("service_catalog")
+}
+
+// ══════════════════════════════════════════════════════════
+//  RH — AGENTS & PERSONNEL
+// ══════════════════════════════════════════════════════════
+
+model Agent {
+  id                String      @id @default(uuid())
+  userId            String      @unique
+  user              User        @relation(fields: [userId], references: [id])
+  matricule         String      @unique
+  cniNumber         String?     // N° CNI
+  position          String
+  department        String?     // Service (ex: Opérations, Commercial...)
+  educationLevel    EducationLevel? // Niveau d'étude
+  shift             ShiftType   @default(JOUR)
+  status            AgentStatus @default(DISPONIBLE)
+  hireDate          DateTime?
+  contractEndDate   DateTime?
+  contractType      EmploymentContractType? // CDD, CDI, etc.
+  baseSalary        Decimal?    @db.Decimal(15, 2)
+  bankAccount       String?
+  emergencyContact  String?     // Nom complet contact d'urgence
+  emergencyPhone    String?
+  emergencyRelation String?     // Lien parental (père, mère, époux...)
+  address           String?
+  behaviorRating    BehaviorRating @default(NORMAL) // Exemplaire/Indiscipliné
+  notes             String?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  certifications    AgentCertification[]
+  deployments       AgentDeployment[] @relation("DeploymentAgent")
+  deploymentReplacements AgentDeployment[] @relation("DeploymentReplacedBy")
+  pointages         Pointage[]
+  patrolRounds      PatrolRound[]
+  equipments        EquipmentAssignment[]
+  leaves            Leave[]
+  payrolls          PayrollLine[]
+  trainings         Training[]
+  disciplinary      DisciplinaryRecord[]
+  candidacy         Candidacy?
+
+  @@map("agents")
+}
+
+model AgentCertification {
+  id          String    @id @default(uuid())
+  agentId     String
+  agent       Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  name        String
+  issuedBy    String?
+  issuedAt    DateTime?
+  expiresAt   DateTime?
+  documentUrl String?
+
+  @@map("agent_certifications")
+}
+
+model AgentDeployment {
+  id              String          @id @default(uuid())
+  reference       String?         @unique
+  agentId         String
+  agent           Agent           @relation("DeploymentAgent", fields: [agentId], references: [id])
+  siteId          String
+  site            Site            @relation(fields: [siteId], references: [id])
+  contractId      String?
+  contract        ClientContract? @relation("DeploymentContract", fields: [contractId], references: [id])
+  startDate       DateTime
+  endDate         DateTime?
+  shift           ShiftType
+  shiftKind       DeploymentShift @default(JOUR)
+  role            DeploymentRole  @default(AGENT)
+  state           DeploymentState @default(BROUILLON)
+  replacedById    String?
+  replacedBy      Agent?          @relation("DeploymentReplacedBy", fields: [replacedById], references: [id])
+  isActive        Boolean         @default(true)
+  assignedBy      String?
+  notes           String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  pointages       Pointage[]
+
+  @@index([agentId, state])
+  @@index([siteId, state])
+  @@map("agent_deployments")
+}
+
+// ══════════════════════════════════════════════════════════
+//  OPÉRATIONS — POINTAGE
+// ══════════════════════════════════════════════════════════
+
+model Pointage {
+  id              String          @id @default(uuid())
+  agentId         String
+  agent           Agent           @relation(fields: [agentId], references: [id])
+  siteId          String?
+  contractId      String?
+  deploymentId    String?
+  deployment      AgentDeployment? @relation(fields: [deploymentId], references: [id])
+  controllerId    String?
+  date            DateTime        @db.Date
+  checkInTime     DateTime?
+  checkOutTime    DateTime?
+  hoursWorked     Float           @default(0)
+  lateMinutes     Int             @default(0)
+  overtimeHours   Float           @default(0)
+  checkInPhoto    String?
+  checkOutPhoto   String?
+  checkInLat      Float?
+  checkInLng      Float?
+  checkOutLat     Float?
+  checkOutLng     Float?
+  shift           ShiftType
+  pointingMethod  PointingMethod  @default(CONTROLEUR)
+  status          PointageStatus  @default(EN_COURS)
+  notes           String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@unique([agentId, date, shift])
+  @@index([siteId, date])
+  @@map("pointages")
+}
+
+// ══════════════════════════════════════════════════════════
+//  OPÉRATIONS — RONDES AGENT (QR/NFC) — sagard.patrol.*
+// ══════════════════════════════════════════════════════════
+
+model PatrolPoint {
+  id                  String   @id @default(uuid())
+  name                String
+  code                String   @unique
+  siteId              String
+  site                Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  sequence            Int      @default(10)
+  locationDescription String?
+  latitude            Float?
+  longitude           Float?
+  expectedIntervalMin Int      @default(60)
+  instructions        String?
+  active              Boolean  @default(true)
+  createdAt           DateTime @default(now())
+
+  checks              PatrolCheck[]
+
+  @@index([siteId, sequence])
+  @@map("patrol_points")
+}
+
+model PatrolRound {
+  id            String           @id @default(uuid())
+  reference     String           @unique
+  siteId        String
+  site          Site             @relation(fields: [siteId], references: [id])
+  agentId       String
+  agent         Agent            @relation(fields: [agentId], references: [id])
+  dateStart     DateTime         @default(now())
+  dateEnd       DateTime?
+  durationMin   Float            @default(0)
+  state         PatrolRoundState @default(EN_COURS)
+  pointsTotal   Int              @default(0)
+  pointsDone    Int              @default(0)
+  completionPct Float            @default(0)
+  notes         String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  checks        PatrolCheck[]
+
+  @@index([siteId, dateStart])
+  @@index([agentId, dateStart])
+  @@map("patrol_rounds")
+}
+
+model PatrolCheck {
+  id          String       @id @default(uuid())
+  roundId     String
+  round       PatrolRound  @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  pointId     String?
+  point       PatrolPoint? @relation(fields: [pointId], references: [id])
+  pointCode   String?
+  checkTime   DateTime     @default(now())
+  latitude    Float?
+  longitude   Float?
+  photoUrl    String?
+  note        String?
+  hasAnomaly  Boolean      @default(false)
+
+  @@index([roundId, checkTime])
+  @@map("patrol_checks")
+}
+
+// ══════════════════════════════════════════════════════════
+//  OPÉRATIONS — CONTRÔLEURS & RONDES
+// ══════════════════════════════════════════════════════════
+
+// ControllerPatrol = sagard.control.visit (visite de contrôle par superviseur)
+model ControllerPatrol {
+  id                  String              @id @default(uuid())
+  reference           String?             @unique
+  controllerId        String
+  siteId              String
+  site                Site                @relation(fields: [siteId], references: [id])
+  contractId          String?
+  visitDatetime       DateTime            @default(now())
+  visitType           ControlVisitType    @default(ROUTINE)
+  arrivedAt           DateTime?
+  leftAt              DateTime?
+  durationMinutes     Int?
+  agentsExpected      Int                 @default(0)
+  agentsChecked       Int                 @default(0)
+  uniformOk           Boolean             @default(false)
+  equipmentOk         Boolean             @default(false)
+  postureOk           Boolean             @default(false)
+  registerOk          Boolean             @default(false)
+  rating              Int?                // 1..5 étoiles
+  state               ControlVisitState   @default(BROUILLON)
+  observations        String?
+  actionsTaken        String?
+  notes               String?
+  photoUrl            String?
+  latitude            Float?
+  longitude           Float?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  agentChecks         PatrolAgentCheck[]
+  incidents           Incident[]          @relation("IncidentControlVisit")
+
+  @@index([siteId, visitDatetime])
+  @@index([controllerId, visitDatetime])
+  @@map("controller_patrols")
+}
+
+// ══════════════════════════════════════════════════════════
+//  OPÉRATIONS — RAPPORTS QUOTIDIENS DE SITE — sagard.daily.report
+// ══════════════════════════════════════════════════════════
+
+model DailyReport {
+  id                String           @id @default(uuid())
+  reference         String           @unique
+  date              DateTime         @db.Date
+  siteId            String
+  site              Site             @relation(fields: [siteId], references: [id])
+  contractId        String?
+  shift             DailyReportShift @default(JOUR)
+  chiefAgentId      String?
+  agentsExpected    Int              @default(0)
+  agentCount        Int              @default(0)
+  state             DailyReportState @default(BROUILLON)
+  weather           WeatherCondition?
+  visitorsCount     Int              @default(0)
+  vehiclesInCount   Int              @default(0)
+  vehiclesOutCount  Int              @default(0)
+  roundsDone        Int              @default(0)
+  summary           String?
+  activities        String?
+  handoverTo        String?
+  keysCount         Int              @default(0)
+  nextShiftNotes    String?
+  validatorId       String?
+  validationDate    DateTime?
+  submittedBy       String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  agents            DailyReportAgent[]
+  incidents         Incident[]       @relation("IncidentDailyReport")
+
+  @@unique([siteId, date, shift])
+  @@index([siteId, date])
+  @@map("daily_reports")
+}
+
+// Table de liaison many-to-many DailyReport ↔ Agent (agents présents)
+model DailyReportAgent {
+  id            String       @id @default(uuid())
+  reportId      String
+  report        DailyReport  @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  agentId       String
+  createdAt     DateTime     @default(now())
+
+  @@unique([reportId, agentId])
+  @@map("daily_report_agents")
+}
+
+// ══════════════════════════════════════════════════════════
+//  OPÉRATIONS — INCIDENTS — sagard.incident
+// ══════════════════════════════════════════════════════════
+
+model Incident {
+  id                String              @id @default(uuid())
+  reference         String              @unique
+  title             String
+  siteId            String
+  site              Site                @relation(fields: [siteId], references: [id])
+  incidentDatetime  DateTime            @default(now())
+  incidentType      IncidentType
+  severity          IncidentSeverity    @default(FAIBLE)
+  state             IncidentState       @default(OUVERT)
+  reporterId        String?
+  dailyReportId     String?
+  dailyReport       DailyReport?        @relation("IncidentDailyReport", fields: [dailyReportId], references: [id])
+  controlVisitId    String?
+  controlVisit      ControllerPatrol?   @relation("IncidentControlVisit", fields: [controlVisitId], references: [id])
+  description       String
+  actionsTaken      String?
+  resolution        String?
+  policeCalled      Boolean             @default(false)
+  clientNotified    Boolean             @default(false)
+  estimatedDamage   Decimal?            @db.Decimal(15, 2)
+  currency          String              @default("XOF")
+  attachmentUrls    String[]            @default([])
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  alerts            Alert[]             @relation("AlertIncident")
+  involvedAgents    IncidentAgent[]
+
+  @@index([siteId, incidentDatetime])
+  @@index([state, severity])
+  @@map("incidents")
+}
+
+model IncidentAgent {
+  id          String   @id @default(uuid())
+  incidentId  String
+  incident    Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  agentId     String
+  role        String?  // Témoin, impliqué, victime, etc.
+  createdAt   DateTime @default(now())
+
+  @@unique([incidentId, agentId])
+  @@map("incident_agents")
+}
+
+// ══════════════════════════════════════════════════════════
+//  OPÉRATIONS — ALERTES / SOS — sagard.alert
+// ══════════════════════════════════════════════════════════
+
+model Alert {
+  id                String         @id @default(uuid())
+  reference         String         @unique
+  siteId            String?
+  agentId           String?
+  alertType         AlertType      @default(SOS)
+  severity          AlertSeverity  @default(WARNING)
+  message           String?
+  latitude          Float?
+  longitude         Float?
+  state             AlertState     @default(NOUVELLE)
+  acknowledgedById  String?
+  acknowledgedAt    DateTime?
+  responseTimeMin   Float          @default(0)
+  resolvedAt        DateTime?
+  incidentId        String?
+  incident          Incident?      @relation("AlertIncident", fields: [incidentId], references: [id])
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  @@index([state, createdAt])
+  @@index([siteId, createdAt])
+  @@map("alerts")
+}
+
+model PatrolAgentCheck {
+  id          String           @id @default(uuid())
+  patrolId    String
+  patrol      ControllerPatrol @relation(fields: [patrolId], references: [id], onDelete: Cascade)
+  agentId     String
+  checkedAt   DateTime
+  status      String
+  notes       String?
+
+  @@map("patrol_agent_checks")
+}
+
+model ControllerLocation {
+  id             String   @id @default(uuid())
+  controllerId   String
+  latitude       Float
+  longitude      Float
+  accuracy       Float?
+  recordedAt     DateTime @default(now())
+
+  @@index([controllerId, recordedAt])
+  @@map("controller_locations")
+}
+
+// ══════════════════════════════════════════════════════════
+//  RH — PAIE, CONGÉS, FORMATION, DISCIPLINAIRE
+// ══════════════════════════════════════════════════════════
+
+model Payroll {
+  id          String        @id @default(uuid())
+  month       Int
+  year        Int
+  status      PayrollStatus @default(BROUILLON)
+  totalBrut   Decimal       @db.Decimal(15, 2) @default(0)
+  totalNet    Decimal       @db.Decimal(15, 2) @default(0)
+  processedAt DateTime?
+  approvedBy  String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  lines       PayrollLine[]
+
+  @@unique([month, year])
+  @@map("payrolls")
+}
+
+model PayrollLine {
+  id             String   @id @default(uuid())
+  payrollId      String
+  payroll        Payroll  @relation(fields: [payrollId], references: [id], onDelete: Cascade)
+  agentId        String
+  agent          Agent    @relation(fields: [agentId], references: [id])
+  daysWorked     Int      @default(0)
+  hoursWorked    Float    @default(0)
+  baseSalary     Decimal  @db.Decimal(15, 2)
+  bonuses        Decimal  @db.Decimal(15, 2) @default(0)
+  deductions     Decimal  @db.Decimal(15, 2) @default(0)
+  grossSalary    Decimal  @db.Decimal(15, 2)
+  netSalary      Decimal  @db.Decimal(15, 2)
+  paidAt         DateTime?
+  paymentMethod  String?
+  notes          String?
+
+  @@map("payroll_lines")
+}
+
+model Leave {
+  id          String      @id @default(uuid())
+  agentId     String
+  agent       Agent       @relation(fields: [agentId], references: [id])
+  type        LeaveType
+  startDate   DateTime    @db.Date
+  endDate     DateTime    @db.Date
+  days        Int
+  reason      String?
+  status      LeaveStatus @default(EN_ATTENTE)
+  approvedBy  String?
+  approvedAt  DateTime?
+  createdAt   DateTime    @default(now())
+
+  @@map("leaves")
+}
+
+model Training {
+  id          String    @id @default(uuid())
+  agentId     String
+  agent       Agent     @relation(fields: [agentId], references: [id])
+  title       String
+  description String?
+  trainer     String?
+  location    String?
+  startDate   DateTime
+  endDate     DateTime?
+  passed      Boolean?
+  certificate String?
+  createdAt   DateTime  @default(now())
+
+  @@map("trainings")
+}
+
+model DisciplinaryRecord {
+  id           String           @id @default(uuid())
+  agentId      String
+  agent        Agent            @relation(fields: [agentId], references: [id])
+  type         DisciplinaryType @default(FAUTE)
+  faultNumber  Int              @default(1) // Faute n° (1, 2, 3...)
+  description  String
+  date         DateTime
+  sanction     String?
+  documentUrl  String?
+  recordedBy   String?
+  createdAt    DateTime         @default(now())
+
+  @@map("disciplinary_records")
+}
+
+model Candidacy {
+  id            String            @id @default(uuid())
+  agentId       String?           @unique
+  agent         Agent?            @relation(fields: [agentId], references: [id])
+  firstName     String
+  lastName      String
+  phone         String
+  email         String?
+  cniNumber     String?
+  position      String
+  cvUrl         String?
+  photoUrl      String?
+  status        RecruitmentStatus @default(CANDIDATURE)
+  appliedAt     DateTime          @default(now())
+  notes         String?
+  processedBy   String?
+  updatedAt     DateTime          @updatedAt
+
+  integrationSteps IntegrationStep[]
+
+  @@map("candidacies")
+}
+
+model IntegrationStep {
+  id           String              @id @default(uuid())
+  candidacyId  String?
+  candidacy    Candidacy?          @relation(fields: [candidacyId], references: [id], onDelete: Cascade)
+  agentId      String?
+  stepType     IntegrationStepType
+  title        String              // ex: "Formation FCB"
+  durationDays Int                 @default(1)
+  startDate    DateTime?
+  endDate      DateTime?
+  completed    Boolean             @default(false)
+  passed       Boolean?            // réussi / échoué
+  trainer      String?             // Formateur
+  notes        String?
+  documentUrl  String?             // Attestation, certificat...
+  createdAt    DateTime            @default(now())
+
+  @@map("integration_steps")
+}
+
+// ══════════════════════════════════════════════════════════
+//  LOT 4 — CRM PROSPECTS : crm.lead
+// ══════════════════════════════════════════════════════════
+
+model CrmLead {
+  id                  String          @id @default(uuid())
+  reference           String          @unique
+  title               String
+  contactName         String?
+  contactEmail        String?
+  contactPhone        String?
+  companyName         String?
+  clientId            String?
+  client              Client?         @relation(fields: [clientId], references: [id])
+  assignedToId        String?
+  stage               LeadStage       @default(NOUVEAU)
+  source              LeadSource      @default(APPEL_ENTRANT)
+  priority            LeadPriority    @default(NORMALE)
+  serviceType         LeadServiceType @default(GARDIENNAGE_STATIQUE)
+  siteAddress         String?
+  siteCity            String?
+  siteSurface         Float?
+  nbAgentsEstimated   Int             @default(0)
+  nbShifts            Int             @default(1)
+  armedRequired       Boolean         @default(false)
+  canineRequired      Boolean         @default(false)
+  riskLevel           String          @default("FAIBLE")
+  targetStartDate     DateTime?       @db.Date
+  estimatedRevenue    Decimal?        @db.Decimal(15, 2)
+  currency            String          @default("XOF")
+  probability         Int             @default(10)  // 0-100 %
+  notes               String?
+  lostReason          String?
+  wonDate             DateTime?
+  lostDate            DateTime?
+  nextActionDate      DateTime?       @db.Date
+  nextActionNote      String?
+  createdById         String?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  activities          LeadActivity[]
+  invoices            Invoice[]
+
+  @@index([stage, priority])
+  @@index([assignedToId, stage])
+  @@index([createdById])
+  @@map("crm_leads")
+}
+
+model LeadActivity {
+  id          String   @id @default(uuid())
+  leadId      String
+  lead        CrmLead  @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  type        String   // APPEL, EMAIL, RDV, NOTE, RELANCE
+  summary     String
+  details     String?
+  date        DateTime @default(now())
+  performedBy String?
+  createdAt   DateTime @default(now())
+
+  @@index([leadId, date])
+  @@map("lead_activities")
+}
+
+// ══════════════════════════════════════════════════════════
+//  LOT 3 — REGISTRES SITE : VISITEURS
+// ══════════════════════════════════════════════════════════
+
+model VisitorLog {
+  id              String        @id @default(uuid())
+  reference       String        @unique
+  siteId          String
+  site            Site          @relation(fields: [siteId], references: [id])
+  visitorName     String
+  visitorCompany  String?
+  visitorPhone    String?
+  idType          IdDocType     @default(CNI)
+  idNumber        String?
+  visitPurpose    VisitPurpose  @default(REUNION)
+  hostName        String?
+  plateNumber     String?
+  checkIn         DateTime      @default(now())
+  checkOut        DateTime?
+  durationMin     Float?        // computed
+  badgeNo         String?
+  badgeReturned   Boolean       @default(false)
+  agentId         String?       // agent who registered
+  photoUrl        String?
+  notes           String?
+  isBlacklisted   Boolean       @default(false)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  keyMovements    KeyMovement[] @relation("KeyMovementVisitor")
+
+  @@index([siteId, checkIn])
+  @@index([idNumber])
+  @@map("visitor_logs")
+}
+
+model Blacklist {
+  id            String          @id @default(uuid())
+  name          String
+  idNumber      String?
+  reason        BlacklistReason
+  description   String?
+  photoUrl      String?
+  incidentId    String?
+  dateStart     DateTime        @default(now()) @db.Date
+  dateEnd       DateTime?       @db.Date
+  active        Boolean         @default(true)
+  createdAt     DateTime        @default(now())
+
+  sites         BlacklistSite[]
+
+  @@index([idNumber])
+  @@map("blacklists")
+}
+
+model BlacklistSite {
+  id           String    @id @default(uuid())
+  blacklistId  String
+  blacklist    Blacklist @relation(fields: [blacklistId], references: [id], onDelete: Cascade)
+  siteId       String
+  site         Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([blacklistId, siteId])
+  @@map("blacklist_sites")
+}
+
+// ══════════════════════════════════════════════════════════
+//  LOT 3 — REGISTRES SITE : CLÉS & TROUSSEAUX
+// ══════════════════════════════════════════════════════════
+
+model Key {
+  id               String      @id @default(uuid())
+  name             String
+  code             String
+  siteId           String
+  site             Site        @relation(fields: [siteId], references: [id])
+  keyType          KeyType     @default(PORTE)
+  state            KeyState    @default(DISPONIBLE)
+  currentHolderId  String?
+  notes            String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  movements        KeyMovement[]
+
+  @@unique([code, siteId])
+  @@index([siteId, state])
+  @@map("keys")
+}
+
+model KeyMovement {
+  id            String          @id @default(uuid())
+  keyId         String
+  key           Key             @relation(fields: [keyId], references: [id], onDelete: Cascade)
+  movementType  KeyMovementType
+  date          DateTime        @default(now())
+  employeeId    String?         // agent or employee
+  visitorLogId  String?
+  visitorLog    VisitorLog?     @relation("KeyMovementVisitor", fields: [visitorLogId], references: [id])
+  issuedById    String?         // security agent who issued
+  notes         String?
+  createdAt     DateTime        @default(now())
+
+  @@index([keyId, date])
+  @@map("key_movements")
+}
+
+// ══════════════════════════════════════════════════════════
+//  LOT 3 — REGISTRES SITE : MATÉRIEL ENRICHI
+// ══════════════════════════════════════════════════════════
+
+model SiteEquipment {
+  id                      String              @id @default(uuid())
+  code                    String?             @unique
+  barcode                 String?
+  name                    String
+  category                EquipmentCategory   @default(TENUE)
+  state                   EquipmentState      @default(EN_STOCK)
+  siteId                  String?
+  site                    Site?               @relation(fields: [siteId], references: [id])
+  employeeId              String?
+  purchaseDate            DateTime?           @db.Date
+  purchaseValue           Decimal?            @db.Decimal(15, 2)
+  currency                String              @default("XOF")
+  supplierId              String?
+  warrantyEnd             DateTime?           @db.Date
+  lastCheckDate           DateTime?           @db.Date
+  nextCheckDate           DateTime?           @db.Date
+  weaponCaliber           String?
+  weaponAuthorization     String?
+  weaponAuthorizationExp  DateTime?           @db.Date
+  notes                   String?
+  imageUrl                String?
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
+
+  movements               EquipmentMovement[]
+
+  @@index([siteId, state])
+  @@index([category, state])
+  @@map("site_equipments")
+}
+
+model EquipmentMovement {
+  id              String                @id @default(uuid())
+  equipmentId     String
+  equipment       SiteEquipment         @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  movementType    EquipmentMovementType
+  date            DateTime              @default(now())
+  employeeId      String?
+  siteId          String?
+  condition       EquipmentCondition    @default(BON)
+  userId          String?               // recorded by
+  notes           String?
+  createdAt       DateTime              @default(now())
+
+  @@index([equipmentId, date])
+  @@map("equipment_movements")
+}
+
+// ══════════════════════════════════════════════════════════
+//  STOCK — ÉQUIPEMENTS & VÉHICULES
+// ══════════════════════════════════════════════════════════
+
+model Equipment {
+  id              String          @id @default(uuid())
+  code            String          @unique
+  name            String
+  category        String
+  brand           String?
+  model           String?
+  serialNumber    String?         @unique
+  purchaseDate    DateTime?
+  purchasePrice   Decimal?        @db.Decimal(15, 2)
+  status          EquipmentStatus @default(DISPONIBLE)
+  photoUrl        String?
+  notes           String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  assignments     EquipmentAssignment[]
+
+  @@map("equipments")
+}
+
+model EquipmentAssignment {
+  id              String     @id @default(uuid())
+  equipmentId     String
+  equipment       Equipment  @relation(fields: [equipmentId], references: [id])
+  agentId         String
+  agent           Agent      @relation(fields: [agentId], references: [id])
+  assignedAt      DateTime   @default(now())
+  returnedAt      DateTime?
+  assignedBy      String
+  returnCondition String?
+  photoUrl        String?
+  notes           String?
+
+  @@map("equipment_assignments")
+}
+
+model Vehicle {
+  id            String        @id @default(uuid())
+  plateNumber   String        @unique
+  type          VehicleType
+  brand         String
+  model         String
+  year          Int?
+  status        VehicleStatus @default(DISPONIBLE)
+  assignedTo    String?
+  fuelType      String        @default("Essence")
+  mileage       Int           @default(0)
+  photoUrl      String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  fuelLogs      FuelLog[]
+  maintenances  Maintenance[]
+
+  @@map("vehicles")
+}
+
+model FuelLog {
+  id          String   @id @default(uuid())
+  vehicleId   String
+  vehicle     Vehicle  @relation(fields: [vehicleId], references: [id])
+  date        DateTime @default(now())
+  liters      Float
+  pricePerL   Decimal  @db.Decimal(10, 2)
+  totalCost   Decimal  @db.Decimal(15, 2)
+  mileageAt   Int?
+  filledBy    String
+  notes       String?
+
+  @@map("fuel_logs")
+}
+
+model Maintenance {
+  id          String   @id @default(uuid())
+  vehicleId   String
+  vehicle     Vehicle  @relation(fields: [vehicleId], references: [id])
+  type        String
+  description String?
+  cost        Decimal? @db.Decimal(15, 2)
+  startDate   DateTime
+  endDate     DateTime?
+  provider    String?
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  @@map("maintenances")
+}
+
+// ══════════════════════════════════════════════════════════
+//  RÉCLAMATIONS & SUGGESTIONS
+// ══════════════════════════════════════════════════════════
+
+model Complaint {
+  id            String          @id @default(uuid())
+  reference     String          @unique
+  clientId      String
+  client        Client          @relation(fields: [clientId], references: [id])
+  siteId        String?
+  title         String
+  description   String
+  status        ComplaintStatus @default(OUVERTE)
+  priority      String          @default("NORMAL")
+  attachmentUrl String?
+  resolvedAt    DateTime?
+  resolvedBy    String?
+  resolution    String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@map("complaints")
+}
+
+// ══════════════════════════════════════════════════════════
+//  NOTIFICATIONS
+// ══════════════════════════════════════════════════════════
+
+model Notification {
+  id          String              @id @default(uuid())
+  userId      String?
+  user        User?               @relation(fields: [userId], references: [id])
+  invoiceId   String?
+  invoice     Invoice?            @relation(fields: [invoiceId], references: [id])
+  type        NotificationType
+  title       String
+  message     String
+  channel     NotificationChannel @default(IN_APP)
+  read        Boolean             @default(false)
+  readAt      DateTime?
+  sentAt      DateTime?
+  data        Json?
+  createdAt   DateTime            @default(now())
+
+  @@index([userId, read])
+  @@map("notifications")
+}
+
+// ══════════════════════════════════════════════════════════
+//  AUDIT LOGS
+// ══════════════════════════════════════════════════════════
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id])
+  action      String
+  entity      String
+  entityId    String?
+  oldData     Json?
+  newData     Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([userId, createdAt])
+  @@map("audit_logs")
+}

@@ -1,0 +1,147 @@
+services:
+
+  # ─────────────────────────────────────────
+  #  PostgreSQL 16
+  # ─────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: sagard_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-sagard}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sagard_secure_2024}
+      POSTGRES_DB: ${POSTGRES_DB:-sagard_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sagard} -d ${POSTGRES_DB:-sagard_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────
+  #  Redis 7
+  # ─────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: sagard_redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD:-sagard_redis_2024} --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "${REDIS_PASSWORD:-sagard_redis_2024}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────
+  #  MinIO (stockage photos & documents)
+  # ─────────────────────────────────────────
+  minio:
+    image: minio/minio:latest
+    container_name: sagard_minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-sagard_minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-sagard_minio_2024}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # ─────────────────────────────────────────
+  #  pgAdmin 4 (interface base de données)
+  # ─────────────────────────────────────────
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: sagard_pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@sagard.ci
+      PGADMIN_DEFAULT_PASSWORD: sagard2024
+    ports:
+      - "5050:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+
+  # ─────────────────────────────────────────
+  #  API NestJS
+  # ─────────────────────────────────────────
+  api:
+    build:
+      context: ../apps/api
+      dockerfile: Dockerfile
+    container_name: sagard_api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - ../apps/api/.env
+    ports:
+      - "4000:4000"
+    volumes:
+      - ../apps/api:/app
+      - /app/node_modules
+    command: sh -c "pnpm prisma migrate deploy && node dist/main"
+
+  # ─────────────────────────────────────────
+  #  Web Next.js
+  # ─────────────────────────────────────────
+  web:
+    build:
+      context: ../apps/web
+      dockerfile: Dockerfile
+    container_name: sagard_web
+    restart: unless-stopped
+    depends_on:
+      - api
+    env_file:
+      - ../apps/web/.env
+    ports:
+      - "3000:3000"
+
+  # ─────────────────────────────────────────
+  #  Nginx reverse proxy
+  # ─────────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: sagard_nginx
+    restart: unless-stopped
+    depends_on:
+      - api
+      - web
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  pgadmin_data:
+
+networks:
+  default:
+    name: sagard_network

@@ -1,0 +1,21 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --sagard-yellow: #C8D400;
+  --sagard-dark: #1E1E1E;
+}
+
+* { box-sizing: border-box; }
+
+body { @apply bg-slate-100 text-slate-900 antialiased; }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { @apply bg-slate-100; }
+::-webkit-scrollbar-thumb { @apply bg-slate-300 rounded-full; }
+
+@media print {
+  .no-print { display: none !important; }
+  body { background: white; }
+}
