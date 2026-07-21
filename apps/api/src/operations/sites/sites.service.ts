@@ -1,6 +1,7 @@
-﻿import { Injectable, NotFoundException } from '@nestjs/common'
+﻿import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common'
 import { PrismaService } from '../../prisma/prisma.service'
 import { randomBytes } from 'crypto'
+import { generatePatrolPointBadgeSvg, generatePatrolPointsSheetSvg } from '../patrols/patrol-qr.util'
 
 @Injectable()
 export class SitesService {
@@ -111,6 +112,18 @@ export class SitesService {
     body: { agentId: string; shift?: string; shiftKind?: string; role?: string; contractId?: string; startDate?: string; endDate?: string; notes?: string; assignedBy?: string }
   ) {
     await this.findOne(siteId)
+    // Un gardien ne peut être affecté qu'à UN SEUL site à la fois (ni doublon, ni multi-site)
+    const existingActive = await this.prisma.agentDeployment.findFirst({
+      where: { agentId: body.agentId, state: 'ACTIF' },
+      include: { site: { select: { name: true } } },
+    })
+    if (existingActive) {
+      throw new BadRequestException(
+        existingActive.siteId === siteId
+          ? 'Ce gardien est déjà affecté à ce site.'
+          : `Ce gardien est déjà affecté au site « ${existingActive.site?.name ?? 'un autre site'} ». Retirez-le d'abord avant de le réaffecter.`,
+      )
+    }
     const ref = `DEP-${new Date().getFullYear()}-${randomBytes(3).toString('hex').toUpperCase()}`
     return this.prisma.agentDeployment.create({
       data: {
@@ -173,6 +186,45 @@ export class SitesService {
 
   async removePatrolPoint(pointId: string) {
     return this.prisma.patrolPoint.update({ where: { id: pointId }, data: { active: false } })
+  }
+
+  // ─── QR de marque « Badge sombre premium » ─────────────────────────
+  /** Renvoie le badge QR (SVG) d'un point de contrôle + ses métadonnées. */
+  async getPatrolPointQr(pointId: string) {
+    const point = await this.prisma.patrolPoint.findUnique({
+      where: { id: pointId },
+      include: { site: { select: { name: true } } },
+    })
+    if (!point) throw new NotFoundException('Point de contrôle introuvable')
+    const svg = generatePatrolPointBadgeSvg({
+      code: point.code,
+      name: point.name,
+      siteName: point.site?.name,
+      sequence: point.sequence,
+    })
+    return {
+      pointId: point.id,
+      code: point.code,
+      name: point.name,
+      siteName: point.site?.name ?? null,
+      sequence: point.sequence,
+      svg,
+    }
+  }
+
+  /** Planche imprimable (SVG A4) de tous les points actifs d'un site. */
+  async getPatrolPointsQrSheet(siteId: string) {
+    const site = await this.findOne(siteId)
+    const points = await this.prisma.patrolPoint.findMany({
+      where: { siteId, active: true },
+      orderBy: { sequence: 'asc' },
+    })
+    if (points.length === 0) throw new NotFoundException('Aucun point de contrôle actif pour ce site')
+    const svg = generatePatrolPointsSheetSvg(
+      points.map(p => ({ code: p.code, name: p.name, siteName: site.name, sequence: p.sequence })),
+      site.name,
+    )
+    return { siteId, siteName: site.name, count: points.length, svg }
   }
 }
 

@@ -88,4 +88,16 @@ export class SitesController {
   removePatrolPoint(@Param('pointId') pointId: string) {
     return this.sitesService.removePatrolPoint(pointId)
   }
+
+  @Get('patrol-points/:pointId/qr')
+  @ApiOperation({ summary: 'Badge QR (SVG) d\'un point de contrôle' })
+  getPatrolPointQr(@Param('pointId') pointId: string) {
+    return this.sitesService.getPatrolPointQr(pointId)
+  }
+
+  @Get(':id/patrol-points/qr-sheet')
+  @ApiOperation({ summary: 'Planche imprimable (SVG) de tous les QR du site' })
+  getPatrolPointsQrSheet(@Param('id') siteId: string) {
+    return this.sitesService.getPatrolPointsQrSheet(siteId)
+  }
 }
