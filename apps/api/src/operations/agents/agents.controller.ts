@@ -63,6 +63,15 @@ export class AgentsController {
     return result
   }
 
+  @Post(':id/terminate')
+  @ApiOperation({ summary: 'Mettre fin au contrat (renvoi) avec motif' })
+  async terminate(@Param('id') id: string, @Body() body: { reason: string }, @Request() req: any) {
+    const old = await this.agentsService.findOne(id)
+    const result = await this.agentsService.terminate(id, body.reason, req.user?.sub)
+    await this.audit.log({ userId: req.user?.sub, action: 'DELETE', entity: 'Agent', entityId: id, oldData: old, newData: { reason: body.reason } })
+    return result
+  }
+
   @Post(':id/equipments')
   @ApiOperation({ summary: 'Assigner un équipement' })
   assignEquipment(@Param('id') id: string, @Body() body: { equipmentId: string; notes?: string }) {

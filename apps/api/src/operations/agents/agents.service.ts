@@ -45,6 +45,16 @@ export class AgentsService {
         leaves:     { orderBy: { startDate: 'desc' }, take: 5 },
         trainings:  { orderBy: { startDate: 'desc' }, take: 5 },
         equipments: { include: { equipment: true }, orderBy: { assignedAt: 'desc' }, take: 10 },
+        disciplinary: { orderBy: { date: 'desc' }, take: 20 },
+        transfers: {
+          orderBy: { transferDate: 'desc' },
+          include: {
+            fromSite: { select: { id: true, name: true, code: true, city: true } },
+            toSite:   { select: { id: true, name: true, code: true, city: true } },
+            decidedBy: { select: { id: true, firstName: true, lastName: true, role: true } },
+          },
+        },
+        terminatedBy: { select: { id: true, firstName: true, lastName: true, role: true } },
       },
     })
     if (!agent) throw new NotFoundException('Agent introuvable')
@@ -188,6 +198,27 @@ export class AgentsService {
     return this.prisma.agent.update({
       where: { id },
       data: { status: 'INACTIF' as any },
+    })
+  }
+
+  async terminate(id: string, reason: string, terminatedById?: string) {
+    const agent = await this.findOne(id)
+    if (agent.status === 'RENVOYE') throw new BadRequestException('Cet agent a déjà été renvoyé')
+
+    // End all active deployments
+    await this.prisma.agentDeployment.updateMany({
+      where: { agentId: id, isActive: true },
+      data: { state: 'TERMINE', isActive: false, endDate: new Date() },
+    })
+
+    return this.prisma.agent.update({
+      where: { id },
+      data: {
+        status: 'RENVOYE' as any,
+        terminationReason: reason,
+        terminatedAt: new Date(),
+        terminatedById: terminatedById ?? null,
+      },
     })
   }
 
