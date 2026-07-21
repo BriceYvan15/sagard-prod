@@ -36,18 +36,19 @@ jobs:
       - name: Build API
         run: cd apps/api && pnpm exec nest build
 
-      - name: Setup SSH
-        run: |
-          mkdir -p ~/.ssh
-          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+      - name: Load SSH key (ssh-agent)
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+
+      - name: Diagnostic — clé publique chargée
+        run: ssh-add -L || echo "(aucune clé chargée dans l'agent)"
 
       - name: Deploy to VPS
         env:
           HOST: ${{ secrets.SSH_HOST }}
         run: |
-          SSH="ssh -i ~/.ssh/id_ed25519 -o BatchMode=yes"
+          SSH="ssh -o StrictHostKeyChecking=accept-new -o BatchMode=yes"
           # Sauvegarde de l'existant (rollback possible)
           $SSH root@"$HOST" "mkdir -p /opt/sagard/_backups && tar czf /opt/sagard/_backups/api-dist-\$(date +%Y%m%d-%H%M%S).tar.gz -C /opt/sagard/api/apps/api dist || true"
           # Envoi du build compilé
