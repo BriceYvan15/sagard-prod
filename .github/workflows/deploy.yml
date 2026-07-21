@@ -1,0 +1,66 @@
+name: Deploy Backend
+
+# Déploiement automatique de l'API SAGARD (NestJS) sur le VPS.
+# Se déclenche à chaque push sur `main` (après merge d'une PR) ou manuellement.
+# Un seul déploiement à la fois (concurrency).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Prisma generate
+        run: cd apps/api && pnpm exec prisma generate --schema=../../packages/database/prisma/schema.prisma
+
+      - name: Build API
+        run: cd apps/api && pnpm exec nest build
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Deploy to VPS
+        env:
+          HOST: ${{ secrets.SSH_HOST }}
+        run: |
+          SSH="ssh -i ~/.ssh/id_ed25519 -o BatchMode=yes"
+          # Sauvegarde de l'existant (rollback possible)
+          $SSH root@"$HOST" "mkdir -p /opt/sagard/_backups && tar czf /opt/sagard/_backups/api-dist-\$(date +%Y%m%d-%H%M%S).tar.gz -C /opt/sagard/api/apps/api dist || true"
+          # Envoi du build compilé
+          rsync -az --delete -e "$SSH" apps/api/dist/ root@"$HOST":/opt/sagard/api/apps/api/dist/
+
+          # --- OPTIONNEL : à activer quand le package.json backend change (nouvelles dépendances) ---
+          # rsync -az -e "$SSH" package.json pnpm-lock.yaml apps/api/package.json root@"$HOST":/opt/sagard/api/
+          # $SSH root@"$HOST" "cd /opt/sagard/api && pnpm install --prod --frozen-lockfile"
+
+          # --- OPTIONNEL : à activer quand le schéma Prisma change (nouvelles migrations) ---
+          # $SSH root@"$HOST" "cd /opt/sagard/api && pnpm exec prisma migrate deploy --schema=packages/database/prisma/schema.prisma"
+
+          # Redémarrage du service PM2
+          $SSH root@"$HOST" "pm2 restart sagard-api --update-env"
+          echo "✅ Backend déployé et redémarré."
