@@ -103,6 +103,7 @@ enum AgentStatus {
   EN_FORMATION
   INACTIF
   RECRUTE
+  RENVOYE
 }
 
 enum ShiftType {
@@ -562,6 +563,7 @@ model User {
   transferDecisions AgentTransfer[] @relation("TransferDecidedBy")
   incidentOpsReports       Incident[] @relation("IncidentOpsReportBy")
   incidentOpsValidations   Incident[] @relation("IncidentOpsReportValidatedBy")
+  terminatedAgents         Agent[]    @relation("AgentTerminatedBy")
 
   @@map("users")
 }
@@ -931,6 +933,10 @@ model Agent {
   address           String?
   behaviorRating    BehaviorRating @default(NORMAL) // Exemplaire/Indiscipliné
   notes             String?
+  terminationReason String?     // Motif de résiliation / renvoi
+  terminatedAt      DateTime?
+  terminatedById    String?
+  terminatedBy      User?       @relation("AgentTerminatedBy", fields: [terminatedById], references: [id])
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
 
