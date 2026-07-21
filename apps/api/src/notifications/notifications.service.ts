@@ -78,6 +78,54 @@ export class NotificationsService {
     }
   }
 
+  async notifyNewIncident(incident: any, siteName: string, creatorName: string) {
+    const recipients = await this.prisma.user.findMany({
+      where: { role: { in: ['CHEF_OPERATIONS', 'DIRECTEUR_GENERAL'] as any }, status: 'ACTIF' },
+      select: { id: true },
+    })
+    for (const u of recipients) {
+      await this.create({
+        userId: u.id,
+        type: 'INCIDENT' as NotificationType,
+        title: `Nouvel incident — ${incident.reference}`,
+        message: `${creatorName} a signalé un incident "${incident.title}" sur le site ${siteName} (gravité: ${incident.severity ?? 'FAIBLE'}).`,
+        data: { incidentId: incident.id, reference: incident.reference },
+      })
+    }
+  }
+
+  async notifyNewDailyReport(report: any, siteName: string, creatorName: string) {
+    const recipients = await this.prisma.user.findMany({
+      where: { role: { in: ['CHEF_OPERATIONS', 'DIRECTEUR_GENERAL'] as any }, status: 'ACTIF' },
+      select: { id: true },
+    })
+    for (const u of recipients) {
+      await this.create({
+        userId: u.id,
+        type: 'RAPPORT' as NotificationType,
+        title: `Nouveau rapport quotidien — ${report.reference}`,
+        message: `${creatorName} a créé un rapport quotidien pour le site ${siteName} (vacation: ${report.shift ?? 'JOUR'}).`,
+        data: { reportId: report.id, reference: report.reference },
+      })
+    }
+  }
+
+  async notifyNewControlVisit(control: any, siteName: string, creatorName: string) {
+    const recipients = await this.prisma.user.findMany({
+      where: { role: { in: ['CHEF_OPERATIONS', 'DIRECTEUR_GENERAL'] as any }, status: 'ACTIF' },
+      select: { id: true },
+    })
+    for (const u of recipients) {
+      await this.create({
+        userId: u.id,
+        type: 'CONTROLE' as NotificationType,
+        title: `Nouvelle visite de contrôle — ${control.reference}`,
+        message: `${creatorName} a créé une visite de contrôle (${control.visitType ?? 'ROUTINE'}) sur le site ${siteName}.`,
+        data: { controlId: control.id, reference: control.reference },
+      })
+    }
+  }
+
   async notifyStagnantProspects() {
     const sevenDaysAgo = new Date()
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)

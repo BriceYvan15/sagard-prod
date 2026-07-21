@@ -16,6 +16,7 @@ import { DeploymentsModule } from './operations/deployments/deployments.module'
 import { PointagesModule } from './operations/pointages/pointages.module'
 import { PatrolsModule } from './operations/patrols/patrols.module'
 import { ControlsModule } from './operations/controls/controls.module'
+import { TransfersModule } from './operations/transfers/transfers.module'
 import { DailyReportsModule } from './operations/daily-reports/daily-reports.module'
 import { IncidentsModule } from './operations/incidents/incidents.module'
 import { AlertsModule } from './operations/alerts/alerts.module'
@@ -32,6 +33,8 @@ import { GatewayModule } from './gateway/gateway.module'
 import { DashboardModule } from './dashboard/dashboard.module'
 import { AccountingModule } from './accounting/accounting.module'
 import { AuditModule } from './audit/audit.module'
+import { SettingsModule } from './settings/settings.module'
+import { MailModule } from './mail/mail.module'
 
 @Module({
   imports: [
@@ -61,6 +64,7 @@ import { AuditModule } from './audit/audit.module'
     SitesModule,
     AgentsModule,
     DeploymentsModule,
+    TransfersModule,
     PointagesModule,
     PatrolsModule,
     ControlsModule,
@@ -80,6 +84,8 @@ import { AuditModule } from './audit/audit.module'
     DashboardModule,
     AccountingModule,
     AuditModule,
+    SettingsModule,
+    MailModule,
   ],
 })
 export class AppModule {}

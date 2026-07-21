@@ -1,15 +1,15 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { IsString, IsOptional, IsNumber, IsNotEmpty } from 'class-validator'
+import { IsString, IsOptional, IsNumber } from 'class-validator'
 
 export class CheckInDto {
   @ApiProperty({ enum: ['JOUR', 'NUIT', 'MIXTE'] })
   @IsString()
   shift: string
 
-  @ApiProperty({ description: 'URL photo obligatoire (prise directe camÃ©ra)' })
+  @ApiPropertyOptional({ description: 'URL photo (optionnel - prise caméra)' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  photoUrl: string
+  photoUrl?: string
 
   @ApiPropertyOptional()
   @IsOptional()

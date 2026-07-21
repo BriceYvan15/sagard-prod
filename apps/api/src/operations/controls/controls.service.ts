@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../../prisma/prisma.service'
+import { NotificationsService } from '../../notifications/notifications.service'
 import { randomBytes } from 'crypto'
 
 /**
@@ -8,14 +9,17 @@ import { randomBytes } from 'crypto'
  */
 @Injectable()
 export class ControlsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notifications: NotificationsService,
+  ) {}
 
   private nextRef(): string {
     return `CTRL-${new Date().getFullYear()}-${randomBytes(3).toString('hex').toUpperCase()}`
   }
 
   async findAll(filters?: { siteId?: string; controllerId?: string; state?: string; visitType?: string; from?: string; to?: string }) {
-    return this.prisma.controllerPatrol.findMany({
+    const controls = await this.prisma.controllerPatrol.findMany({
       where: {
         ...(filters?.siteId       && { siteId: filters.siteId }),
         ...(filters?.controllerId && { controllerId: filters.controllerId }),
@@ -35,6 +39,12 @@ export class ControlsService {
       orderBy: { visitDatetime: 'desc' },
       take: 200,
     })
+    const controllerIds = [...new Set(controls.map(c => c.controllerId).filter(Boolean))] as string[]
+    const users = controllerIds.length > 0
+      ? await this.prisma.user.findMany({ where: { id: { in: controllerIds } }, select: { id: true, firstName: true, lastName: true, role: true } })
+      : []
+    const userMap = new Map(users.map(u => [u.id, u]))
+    return controls.map(c => ({ ...c, controller: userMap.get(c.controllerId) ?? null }))
   }
 
   async findOne(id: string) {
@@ -47,11 +57,14 @@ export class ControlsService {
       },
     })
     if (!v) throw new NotFoundException('Visite de contrôle introuvable')
-    return v
+    const controller = v.controllerId
+      ? await this.prisma.user.findUnique({ where: { id: v.controllerId }, select: { id: true, firstName: true, lastName: true, role: true, email: true } })
+      : null
+    return { ...v, controller }
   }
 
   async create(data: any) {
-    return this.prisma.controllerPatrol.create({
+    const control = await this.prisma.controllerPatrol.create({
       data: {
         reference:     data.reference ?? this.nextRef(),
         controllerId:  data.controllerId,
@@ -65,6 +78,17 @@ export class ControlsService {
         state:         'BROUILLON',
       },
     })
+
+    // Notifier le chef des opérations et le DG
+    const site = await this.prisma.site.findUnique({ where: { id: data.siteId }, select: { name: true } })
+    let creatorName = 'Un contrôleur'
+    if (data.controllerId) {
+      const creator = await this.prisma.user.findUnique({ where: { id: data.controllerId }, select: { firstName: true, lastName: true } })
+      if (creator) creatorName = `${creator.firstName} ${creator.lastName}`
+    }
+    this.notifications.notifyNewControlVisit(control, site?.name ?? 'inconnu', creatorName).catch(() => {})
+
+    return control
   }
 
   async update(id: string, data: any) {

@@ -1,11 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { IsString, IsOptional, IsNumber, IsNotEmpty } from 'class-validator'
+import { IsString, IsOptional, IsNumber } from 'class-validator'
 
 export class CheckOutDto {
-  @ApiProperty({ description: 'URL photo obligatoire (fin de service)' })
+  @ApiPropertyOptional({ description: 'URL photo (optionnel - fin de service)' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  photoUrl: string
+  photoUrl?: string
 
   @ApiPropertyOptional()
   @IsOptional()

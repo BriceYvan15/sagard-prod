@@ -1,4 +1,4 @@
-﻿import { Controller, Get, Post, Param, Body, Query, UseGuards, Request } from '@nestjs/common'
+﻿import { Controller, Get, Post, Patch, Param, Body, Query, UseGuards, Request } from '@nestjs/common'
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger'
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard'
 import { PointagesService } from './pointages.service'
@@ -48,6 +48,12 @@ export class PointagesController {
   @ApiOperation({ summary: 'Fin de poste' })
   checkOut(@Param('id') id: string, @Request() req: any, @Body() body: any) {
     return this.pointagesService.checkOut(req.user.agentId ?? req.user.sub, id, body)
+  }
+
+  @Patch(':id/position')
+  @ApiOperation({ summary: 'Mise à jour position GPS (tracking horaire)' })
+  updatePosition(@Param('id') id: string, @Request() req: any, @Body() body: { latitude?: number; longitude?: number }) {
+    return this.pointagesService.updatePosition(req.user.agentId ?? req.user.sub, id, body)
   }
 
   @Post('generate-daily')

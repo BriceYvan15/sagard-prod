@@ -20,13 +20,13 @@ export class LeadsController {
   }
 
   @Get('stats')
-  getPipelineStats() {
-    return this.svc.getPipelineStats()
+  getPipelineStats(@Request() req: any) {
+    return this.svc.getPipelineStats(req.user)
   }
 
   @Get('commercial-stats')
-  getCommercialStats() {
-    return this.svc.getCommercialStats()
+  getCommercialStats(@Request() req: any) {
+    return this.svc.getCommercialStats(req.user)
   }
 
   @Get(':id')

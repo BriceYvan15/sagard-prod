@@ -20,9 +20,9 @@ export class HrController {
   }
 
   @Post('payrolls/generate')
-  @ApiOperation({ summary: 'Générer la paie mensuelle' })
-  generatePayroll(@Body() body: { month: number; year: number }) {
-    return this.hrService.generateMonthlyPayroll(body.month, body.year)
+  @ApiOperation({ summary: 'Générer la paie mensuelle (optionnel: agentIds pour sélection)' })
+  generatePayroll(@Body() body: { month: number; year: number; agentIds?: string[] }) {
+    return this.hrService.generateMonthlyPayroll(body.month, body.year, body.agentIds)
   }
 
   @Get('payslip/:id')
@@ -36,6 +36,26 @@ export class HrController {
 
   @Patch('payrolls/:id/pay')
   markPaid(@Param('id') id: string) { return this.hrService.markPayrollPaid(id) }
+
+  @Post('payrolls/:id/delete')
+  @ApiOperation({ summary: 'Supprimer une fiche de paie (non payée)' })
+  deletePayroll(@Param('id') id: string) { return this.hrService.deletePayroll(id) }
+
+  @Get('payrolls/:id/detail')
+  @ApiOperation({ summary: 'Détail d\'une paie avec toutes les lignes' })
+  getPayrollDetail(@Param('id') id: string) { return this.hrService.getPayrollDetail(id) }
+
+  @Patch('payroll-lines/:id')
+  @ApiOperation({ summary: 'Modifier une ligne de paie (primes, retenues, jours)' })
+  updatePayrollLine(@Param('id') id: string, @Body() body: any) {
+    return this.hrService.updatePayrollLine(id, body)
+  }
+
+  @Patch('payroll-lines/:id/block')
+  @ApiOperation({ summary: 'Bloquer / débloquer la paie d\'un employé' })
+  toggleBlockPayrollLine(@Param('id') id: string, @Body() body: { blocked: boolean; reason?: string }) {
+    return this.hrService.toggleBlockPayrollLine(id, body.blocked, body.reason)
+  }
 
   // ── Congés ──
   @Get('leaves')

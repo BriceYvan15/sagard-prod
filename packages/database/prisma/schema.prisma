@@ -65,21 +65,6 @@ enum InvoicingFrequency {
   ANNUELLE
 }
 
-enum ClientSegment {
-  RESIDENTIEL
-  COMMERCIAL
-  INDUSTRIEL
-  BANQUE_FINANCE
-  AMBASSADE_DIPLOMATIQUE
-  EVENEMENTIEL
-  ADMINISTRATION_PUBLIQUE
-  PARTICULIER
-  ENTREPRISE_PRIVEE
-  INSTITUTION_PUBLIQUE
-  ONG
-  AMBASSADE
-  AUTRE
-}
 
 enum ShiftCount {
   ONE
@@ -87,10 +72,18 @@ enum ShiftCount {
   THREE
 }
 
+enum PaymentMethod {
+  CHEQUE
+  VIREMENT_BANCAIRE
+  MOBILE_MONEY
+  ESPECE
+}
+
 enum InvoiceStatus {
   BROUILLON
   ENVOYEE
   ACCEPTEE
+  PARTIELLEMENT_PAYEE
   PAYEE
   RETARD
   ANNULEE
@@ -184,6 +177,7 @@ enum ControlVisitType {
   ALERTE
   RELEVE
   ESCORTE
+  AUTRE
 }
 
 enum ControlVisitState {
@@ -239,6 +233,13 @@ enum IncidentState {
   INVESTIGATION
   RESOLU
   CLOS
+}
+
+enum OpsReportState {
+  PENDING
+  SOUMIS
+  VALIDE
+  REJETE
 }
 
 enum AlertType {
@@ -440,6 +441,8 @@ enum NotificationType {
   INCIDENT
   SYSTEME
   COMMERCIAL
+  RAPPORT
+  CONTROLE
 }
 
 enum NotificationChannel {
@@ -555,6 +558,10 @@ model User {
   notifications  Notification[]
   auditLogs      AuditLog[]
   sessions       UserSession[]
+  visitorLogs    VisitorLog[]
+  transferDecisions AgentTransfer[] @relation("TransferDecidedBy")
+  incidentOpsReports       Incident[] @relation("IncidentOpsReportBy")
+  incidentOpsValidations   Incident[] @relation("IncidentOpsReportValidatedBy")
 
   @@map("users")
 }
@@ -581,7 +588,7 @@ model Client {
   code          String?      @unique
   name          String
   legalName     String?
-  segment       ClientSegment @default(AUTRE)
+  segment       String        @default("AUTRE")
   sector        String?
   taxId         String?      @unique
   rccm          String?      // Registre du Commerce et du Crédit Mobilier
@@ -754,6 +761,8 @@ model Site {
   keys              Key[]
   siteEquipments    SiteEquipment[]
   blacklists        BlacklistSite[]
+  transfersFrom     AgentTransfer[]  @relation("TransferFromSite")
+  transfersTo       AgentTransfer[]  @relation("TransferToSite")
 
   @@map("sites")
 }
@@ -823,6 +832,7 @@ model Invoice {
   paidAt          DateTime?
   paidAmount      Decimal?      @db.Decimal(15, 2)
   notes           String?
+  paymentMethod   PaymentMethod?
   qrCodeData      String?
   createdById     String?
   createdAt       DateTime      @default(now())
@@ -935,6 +945,7 @@ model Agent {
   trainings         Training[]
   disciplinary      DisciplinaryRecord[]
   candidacy         Candidacy?
+  transfers         AgentTransfer[]    @relation("TransferAgent")
 
   @@map("agents")
 }
@@ -983,6 +994,32 @@ model AgentDeployment {
 }
 
 // ══════════════════════════════════════════════════════════
+//  RH — MUTATIONS D'AGENTS (transferts entre sites)
+// ══════════════════════════════════════════════════════════
+
+model AgentTransfer {
+  id              String   @id @default(uuid())
+  agentId         String
+  agent           Agent    @relation("TransferAgent", fields: [agentId], references: [id])
+  fromSiteId      String
+  fromSite        Site     @relation("TransferFromSite", fields: [fromSiteId], references: [id])
+  toSiteId        String
+  toSite          Site     @relation("TransferToSite", fields: [toSiteId], references: [id])
+  fromDeploymentId String?
+  toDeploymentId   String?
+  motif           String
+  transferDate    DateTime @default(now())
+  decidedById     String?
+  decidedBy       User?    @relation("TransferDecidedBy", fields: [decidedById], references: [id])
+  createdAt       DateTime @default(now())
+
+  @@index([agentId, transferDate])
+  @@index([fromSiteId])
+  @@index([toSiteId])
+  @@map("agent_transfers")
+}
+
+// ══════════════════════════════════════════════════════════
 //  OPÉRATIONS — POINTAGE
 // ══════════════════════════════════════════════════════════
 
@@ -1007,6 +1044,9 @@ model Pointage {
   checkInLng      Float?
   checkOutLat     Float?
   checkOutLng     Float?
+  currentLat      Float?
+  currentLng      Float?
+  lastPositionAt  DateTime?
   shift           ShiftType
   pointingMethod  PointingMethod  @default(CONTROLEUR)
   status          PointageStatus  @default(EN_COURS)
@@ -1158,6 +1198,7 @@ model DailyReport {
   validatorId       String?
   validationDate    DateTime?
   submittedBy       String?
+  attachmentUrls    String[]         @default([])
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
 
@@ -1208,6 +1249,14 @@ model Incident {
   estimatedDamage   Decimal?            @db.Decimal(15, 2)
   currency          String              @default("XOF")
   attachmentUrls    String[]            @default([])
+  opsReport         String?
+  opsReportDate     DateTime?
+  opsReportById     String?
+  opsReportBy       User?               @relation("IncidentOpsReportBy", fields: [opsReportById], references: [id])
+  opsReportState    OpsReportState      @default(PENDING)
+  opsReportValidatedById String?
+  opsReportValidatedBy   User?          @relation("IncidentOpsReportValidatedBy", fields: [opsReportValidatedById], references: [id])
+  opsReportValidatedAt   DateTime?
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
 
@@ -1216,6 +1265,7 @@ model Incident {
 
   @@index([siteId, incidentDatetime])
   @@index([state, severity])
+  @@index([opsReportState])
   @@map("incidents")
 }
 
@@ -1322,6 +1372,8 @@ model PayrollLine {
   paidAt         DateTime?
   paymentMethod  String?
   notes          String?
+  blocked        Boolean  @default(false)
+  blockReason    String?
 
   @@map("payroll_lines")
 }
@@ -1507,6 +1559,7 @@ model VisitorLog {
   badgeNo         String?
   badgeReturned   Boolean       @default(false)
   agentId         String?       // agent who registered
+  agent           User?         @relation(fields: [agentId], references: [id])
   photoUrl        String?
   notes           String?
   isBlacklisted   Boolean       @default(false)
@@ -1806,3 +1859,38 @@ model AuditLog {
   @@index([userId, createdAt])
   @@map("audit_logs")
 }
+
+// ══════════════════════════════════════════════════════════
+//  SYSTEM SETTINGS
+// ══════════════════════════════════════════════════════════
+
+model CompanySetting {
+  id        String   @id @default(uuid())
+  name      String   @default("SAGARD SÉCURITÉ")
+  phone     String?
+  email     String?
+  address   String   @default("Abidjan, Côte d'Ivoire")
+  rccm      String?
+  ncc       String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("company_settings")
+}
+
+// ══════════════════════════════════════════════════════════
+//  CHART OF ACCOUNTS (Plan comptable)
+// ══════════════════════════════════════════════════════════
+
+model AccountingAccount {
+  id        String   @id @default(uuid())
+  code      String   @unique
+  label     String
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("accounting_accounts")
+}
+

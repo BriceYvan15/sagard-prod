@@ -31,6 +31,12 @@ export class UsersController {
     return this.usersService.create(body)
   }
 
+  @Patch(':id')
+  @Roles(Role.DIRECTEUR_GENERAL)
+  update(@Param('id') id: string, @Body() body: any) {
+    return this.usersService.update(id, body)
+  }
+
   @Patch(':id/suspend')
   @Roles(Role.DIRECTEUR_GENERAL)
   suspend(@Param('id') id: string) {

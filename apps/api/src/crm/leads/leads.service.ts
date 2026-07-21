@@ -224,17 +224,20 @@ export class LeadsService {
   }
 
   // ── Commercial performance stats (DG alerts) ──
-  async getCommercialStats() {
+  async getCommercialStats(user?: { id: string; role: string }) {
     const now = new Date()
     const weekStart = new Date(now)
     weekStart.setDate(now.getDate() - ((now.getDay() + 6) % 7))
     weekStart.setHours(0, 0, 0, 0)
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
 
+    const baseWhere: any = {}
+    if (user && user.role === 'COMMERCIAL') baseWhere.createdById = user.id
+
     // Prospects created this week grouped by commercial
     const weeklyByCommercial = await this.prisma.crmLead.groupBy({
       by: ['createdById'],
-      where: { createdAt: { gte: weekStart } },
+      where: { ...baseWhere, createdAt: { gte: weekStart } },
       _count: true,
     })
 
@@ -242,14 +245,14 @@ export class LeadsService {
     const thirtyDaysAgo = new Date(now)
     thirtyDaysAgo.setDate(now.getDate() - 30)
     const staleProspects = await this.prisma.crmLead.findMany({
-      where: { stage: 'NOUVEAU', createdAt: { lt: thirtyDaysAgo } },
+      where: { ...baseWhere, stage: 'NOUVEAU', createdAt: { lt: thirtyDaysAgo } },
       select: { id: true, reference: true, companyName: true, contactName: true, createdById: true, createdAt: true },
       orderBy: { createdAt: 'asc' },
     })
 
     // Overdue invoices (due date passed)
     const overdueInvoices = await this.prisma.invoice.findMany({
-      where: { status: { in: ['BROUILLON', 'ENVOYEE'] }, dueDate: { lt: now } },
+      where: { ...baseWhere, status: { in: ['BROUILLON', 'ENVOYEE'] }, dueDate: { lt: now } },
       select: { id: true, reference: true, totalAmount: true, dueDate: true, clientId: true, leadId: true },
       orderBy: { dueDate: 'asc' },
     })
@@ -257,12 +260,12 @@ export class LeadsService {
     // Best commercial this month
     const monthlyCreated = await this.prisma.crmLead.groupBy({
       by: ['createdById'],
-      where: { createdAt: { gte: monthStart } },
+      where: { ...baseWhere, createdAt: { gte: monthStart } },
       _count: true,
     })
     const monthlyWon = await this.prisma.crmLead.groupBy({
       by: ['createdById'],
-      where: { wonDate: { gte: monthStart } },
+      where: { ...baseWhere, wonDate: { gte: monthStart } },
       _count: true,
     })
 
@@ -327,14 +330,16 @@ export class LeadsService {
   }
 
   // ── Stats ──
-  async getPipelineStats() {
+  async getPipelineStats(user?: { id: string; role: string }) {
     const stages = ['NOUVEAU', 'QUALIFIE', 'PROPOSITION', 'NEGOCIATION', 'GAGNE', 'PERDU']
+    const baseWhere: any = {}
+    if (user && user.role === 'COMMERCIAL') baseWhere.createdById = user.id
     const counts = await Promise.all(
       stages.map(async (stage) => ({
         stage,
-        count: await this.prisma.crmLead.count({ where: { stage: stage as any } }),
+        count: await this.prisma.crmLead.count({ where: { ...baseWhere, stage: stage as any } }),
         revenue: await this.prisma.crmLead.aggregate({
-          where: { stage: stage as any },
+          where: { ...baseWhere, stage: stage as any },
           _sum: { estimatedRevenue: true },
         }),
       })),

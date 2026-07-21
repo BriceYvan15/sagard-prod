@@ -24,7 +24,7 @@ export class DeploymentsService {
       },
       include: {
         agent: { include: { user: { select: { firstName: true, lastName: true, phone: true } } } },
-        site:  { select: { id: true, name: true, code: true, city: true } },
+        site:  { select: { id: true, name: true, code: true, city: true, latitude: true, longitude: true, address: true, district: true } },
         contract: { select: { id: true, reference: true } },
         replacedBy: { include: { user: { select: { firstName: true, lastName: true } } } },
       },
@@ -143,6 +143,60 @@ export class DeploymentsService {
           notes:      `Remplace l'affectation ${current.reference}`,
         },
       })
+    })
+  }
+
+  /** Mute l'agent vers un autre site : termine l'affectation actuelle + crée la nouvelle + enregistre le transfer */
+  async transfer(id: string, body: { toSiteId: string; motif: string; transferDate?: string; decidedById?: string }) {
+    const current = await this.findOne(id)
+    if (current.state !== 'ACTIF') {
+      throw new BadRequestException('Seule une affectation ACTIVE peut être mutée.')
+    }
+    if (current.siteId === body.toSiteId) {
+      throw new BadRequestException('Le site de destination doit être différent du site actuel.')
+    }
+    const transferDate = body.transferDate ? new Date(body.transferDate) : new Date()
+
+    return this.prisma.$transaction(async tx => {
+      // 1. Terminer l'affectation actuelle
+      await tx.agentDeployment.update({
+        where: { id },
+        data: { state: 'TERMINE', isActive: false, endDate: transferDate },
+      })
+
+      // 2. Créer la nouvelle affectation sur le site de destination
+      const newDeployment = await tx.agentDeployment.create({
+        data: {
+          reference:   this.nextRef(),
+          agentId:     current.agentId,
+          siteId:      body.toSiteId,
+          contractId:  current.contractId,
+          shift:       current.shift,
+          shiftKind:   current.shiftKind,
+          role:        current.role,
+          state:       'ACTIF',
+          startDate:   transferDate,
+          isActive:    true,
+          assignedBy:  body.decidedById ?? null,
+          notes:       `Muté depuis ${current.reference} — Motif: ${body.motif}`,
+        },
+      })
+
+      // 3. Enregistrer le transfer
+      const transfer = await tx.agentTransfer.create({
+        data: {
+          agentId:          current.agentId,
+          fromSiteId:       current.siteId,
+          toSiteId:         body.toSiteId,
+          fromDeploymentId: id,
+          toDeploymentId:   newDeployment.id,
+          motif:            body.motif,
+          transferDate,
+          decidedById:      body.decidedById ?? null,
+        },
+      })
+
+      return { newDeployment, transfer }
     })
   }
 }

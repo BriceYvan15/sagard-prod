@@ -1,4 +1,4 @@
-﻿import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards, Request } from '@nestjs/common'
+﻿import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards, Request, Res } from '@nestjs/common'
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger'
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard'
 import { RolesGuard } from '../../auth/guards/roles.guard'
@@ -25,6 +25,17 @@ export class ClientsController {
   @ApiOperation({ summary: 'Détail client' })
   findOne(@Param('id') id: string) {
     return this.clientsService.findOne(id)
+  }
+
+  @Get(':id/pdf')
+  @ApiOperation({ summary: 'Télécharger la fiche client en PDF' })
+  async downloadPdf(@Param('id') id: string, @Res() res: any) {
+    const pdf = await this.clientsService.generateClientPdf(id)
+    const client = await this.clientsService.findOne(id)
+    const filename = (client as any)?.name?.replace(/[^a-zA-Z0-9]/g, '_') ?? 'client'
+    res.set('Content-Type', 'application/pdf')
+    res.set('Content-Disposition', `attachment; filename="fiche_${filename}.pdf"`)
+    res.send(pdf)
   }
 
   @Get(':id/stats')

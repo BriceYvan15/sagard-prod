@@ -1,5 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common'
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common'
 import { PrismaService } from '../../prisma/prisma.service'
+import { NotificationsService } from '../../notifications/notifications.service'
 import { randomBytes } from 'crypto'
 
 /**
@@ -8,14 +9,17 @@ import { randomBytes } from 'crypto'
  */
 @Injectable()
 export class IncidentsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notifications: NotificationsService,
+  ) {}
 
   private nextRef(): string {
     return `INC-${new Date().getFullYear()}-${randomBytes(3).toString('hex').toUpperCase()}`
   }
 
   async findAll(filters?: { siteId?: string; state?: string; severity?: string; incidentType?: string; from?: string; to?: string }) {
-    return this.prisma.incident.findMany({
+    const incidents = await this.prisma.incident.findMany({
       where: {
         ...(filters?.siteId       && { siteId: filters.siteId }),
         ...(filters?.state        && { state: filters.state as any }),
@@ -35,6 +39,12 @@ export class IncidentsService {
       orderBy: { incidentDatetime: 'desc' },
       take: 200,
     })
+    const reporterIds = [...new Set(incidents.map(i => i.reporterId).filter(Boolean))] as string[]
+    const users = reporterIds.length > 0
+      ? await this.prisma.user.findMany({ where: { id: { in: reporterIds } }, select: { id: true, firstName: true, lastName: true, role: true } })
+      : []
+    const userMap = new Map(users.map(u => [u.id, u]))
+    return incidents.map(i => ({ ...i, reporter: i.reporterId ? userMap.get(i.reporterId) ?? null : null }))
   }
 
   async findOne(id: string) {
@@ -46,14 +56,20 @@ export class IncidentsService {
         controlVisit: { select: { id: true, reference: true } },
         involvedAgents: true,
         alerts: { select: { id: true, reference: true, alertType: true, severity: true } },
+        opsReportBy: { select: { id: true, firstName: true, lastName: true, role: true } },
+        opsReportValidatedBy: { select: { id: true, firstName: true, lastName: true, role: true } },
       },
     })
     if (!inc) throw new NotFoundException('Incident introuvable')
-    return inc
+    let reporter = null
+    if (inc.reporterId) {
+      reporter = await this.prisma.user.findUnique({ where: { id: inc.reporterId }, select: { id: true, firstName: true, lastName: true, role: true, email: true } })
+    }
+    return { ...inc, reporter }
   }
 
   async create(data: any) {
-    return this.prisma.incident.create({
+    const incident = await this.prisma.incident.create({
       data: {
         reference: this.nextRef(),
         title: data.title,
@@ -74,6 +90,17 @@ export class IncidentsService {
         attachmentUrls: data.attachmentUrls ?? [],
       },
     })
+
+    // Notifier le chef des opérations et le DG
+    const site = await this.prisma.site.findUnique({ where: { id: data.siteId }, select: { name: true } })
+    let creatorName = 'Un utilisateur'
+    if (data.reporterId) {
+      const creator = await this.prisma.user.findUnique({ where: { id: data.reporterId }, select: { firstName: true, lastName: true } })
+      if (creator) creatorName = `${creator.firstName} ${creator.lastName}`
+    }
+    this.notifications.notifyNewIncident(incident, site?.name ?? 'inconnu', creatorName).catch(() => {})
+
+    return incident
   }
 
   async update(id: string, data: any) {
@@ -82,6 +109,14 @@ export class IncidentsService {
     if (patch.incidentDatetime) patch.incidentDatetime = new Date(patch.incidentDatetime)
     if (patch.estimatedDamage != null) patch.estimatedDamage = Number(patch.estimatedDamage)
     return this.prisma.incident.update({ where: { id }, data: patch })
+  }
+
+  async updatePhoto(id: string, photoUrl: string) {
+    await this.findOne(id)
+    return this.prisma.incident.update({
+      where: { id },
+      data: { attachmentUrls: { push: photoUrl } },
+    })
   }
 
   async investigate(id: string) { return this.prisma.incident.update({ where: { id }, data: { state: 'INVESTIGATION' } }) }
@@ -100,5 +135,65 @@ export class IncidentsService {
 
   async removeAgent(incidentId: string, agentId: string) {
     return this.prisma.incidentAgent.deleteMany({ where: { incidentId, agentId } })
+  }
+
+  // ─── Rapport d'incident par le chef des opérations ────────────────
+  async submitOpsReport(id: string, report: string, userId: string) {
+    const inc = await this.findOne(id)
+    if (!report.trim()) throw new BadRequestException('Le rapport ne peut pas être vide.')
+    const updated = await this.prisma.incident.update({
+      where: { id },
+      data: {
+        opsReport: report.trim(),
+        opsReportDate: new Date(),
+        opsReportById: userId,
+        opsReportState: 'SOUMIS',
+      },
+    })
+
+    // Notifier tous les DG
+    const dgs = await this.prisma.user.findMany({
+      where: { role: 'DIRECTEUR_GENERAL', status: 'ACTIF' },
+      select: { id: true },
+    })
+    if (dgs.length > 0) {
+      await this.prisma.notification.createMany({
+        data: dgs.map(dg => ({
+          userId: dg.id,
+          type: 'INCIDENT',
+          title: `Rapport d'incident — ${inc.reference}`,
+          message: `Le chef des opérations a soumis un rapport pour l'incident "${inc.title}".`,
+          channel: 'IN_APP',
+          data: { incidentId: id, opsReportState: 'SOUMIS' },
+        })),
+      })
+    }
+
+    return updated
+  }
+
+  async validateOpsReport(id: string, userId: string) {
+    await this.findOne(id)
+    return this.prisma.incident.update({
+      where: { id },
+      data: {
+        opsReportState: 'VALIDE',
+        opsReportValidatedById: userId,
+        opsReportValidatedAt: new Date(),
+      },
+    })
+  }
+
+  async rejectOpsReport(id: string, userId: string, reason?: string) {
+    const inc = await this.findOne(id)
+    return this.prisma.incident.update({
+      where: { id },
+      data: {
+        opsReportState: 'REJETE',
+        opsReportValidatedById: userId,
+        opsReportValidatedAt: new Date(),
+        ...(reason && { opsReport: `${inc.opsReport ?? ''}\n\n--- Motif de rejet: ${reason}` }),
+      },
+    })
   }
 }

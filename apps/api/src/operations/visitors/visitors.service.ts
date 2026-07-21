@@ -8,7 +8,10 @@ export class VisitorsService {
   async findAll(siteId?: string) {
     return this.prisma.visitorLog.findMany({
       where: siteId ? { siteId } : undefined,
-      include: { site: { select: { id: true, name: true } } },
+      include: {
+        site: { select: { id: true, name: true } },
+        agent: { select: { id: true, firstName: true, lastName: true } },
+      },
       orderBy: { checkIn: 'desc' },
       take: 200,
     })
@@ -19,6 +22,7 @@ export class VisitorsService {
       where: { id },
       include: {
         site: { select: { id: true, name: true } },
+        agent: { select: { id: true, firstName: true, lastName: true } },
         keyMovements: { include: { key: true } },
       },
     })
@@ -55,7 +59,10 @@ export class VisitorsService {
         notes: data.notes,
         isBlacklisted,
       },
-      include: { site: { select: { id: true, name: true } } },
+      include: {
+        site: { select: { id: true, name: true } },
+        agent: { select: { id: true, firstName: true, lastName: true } },
+      },
     })
   }
 

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Query, Body, Param, UseGuards, Request } from '@nestjs/common'
+import { Controller, Get, Post, Patch, Delete, Query, Body, Param, UseGuards, Request } from '@nestjs/common'
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger'
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard'
 import { AccountingService } from './accounting.service'
@@ -43,7 +43,7 @@ export class AccountingController {
     @Body() body: { amount?: number; paymentDate?: string; paymentMethod?: string; reference?: string },
     @Request() req: any,
   ) {
-    return this.accounting.registerPayment(invoiceId, body, req.user?.sub)
+    return this.accounting.registerPayment(invoiceId, body, req.user?.id)
   }
 
   @Get('unpaid-invoices')
@@ -58,12 +58,43 @@ export class AccountingController {
     @Body() body: { description: string; amount: number; account: string; date?: string; reference?: string; category?: string },
     @Request() req: any,
   ) {
-    return this.accounting.recordExpense(body, req.user?.sub)
+    return this.accounting.recordExpense(body, req.user?.id)
   }
 
   @Get('expenses')
   @ApiOperation({ summary: 'Liste des dépenses manuelles' })
   getExpenses(@Query('year') year?: string, @Query('month') month?: string) {
     return this.accounting.getExpenses(year ? +year : undefined, month ? +month : undefined)
+  }
+
+  // ── Plan comptable (Chart of Accounts) ───────────────────
+  @Get('accounts')
+  @ApiOperation({ summary: 'Liste des comptes du plan comptable' })
+  getAccounts() {
+    return this.accounting.getAccounts()
+  }
+
+  @Post('accounts')
+  @ApiOperation({ summary: 'Ajouter un compte au plan comptable' })
+  createAccount(@Body() body: { code: string; label: string }) {
+    return this.accounting.createAccount(body)
+  }
+
+  @Patch('accounts/:id')
+  @ApiOperation({ summary: 'Modifier un compte du plan comptable' })
+  updateAccount(@Param('id') id: string, @Body() body: { code?: string; label?: string }) {
+    return this.accounting.updateAccount(id, body)
+  }
+
+  @Delete('accounts/:id')
+  @ApiOperation({ summary: 'Supprimer un compte du plan comptable' })
+  deleteAccount(@Param('id') id: string) {
+    return this.accounting.deleteAccount(id)
+  }
+
+  @Post('accounts/reset')
+  @ApiOperation({ summary: 'Réinitialiser le plan comptable avec les comptes SYSCOHADA par défaut' })
+  resetAccounts() {
+    return this.accounting.resetAccounts()
   }
 }

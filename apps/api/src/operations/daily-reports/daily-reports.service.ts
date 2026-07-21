@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common'
 import { PrismaService } from '../../prisma/prisma.service'
+import { NotificationsService } from '../../notifications/notifications.service'
 import { randomBytes } from 'crypto'
 
 /**
@@ -8,14 +9,17 @@ import { randomBytes } from 'crypto'
  */
 @Injectable()
 export class DailyReportsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notifications: NotificationsService,
+  ) {}
 
   private nextRef(): string {
     return `RPT-${new Date().getFullYear()}-${randomBytes(3).toString('hex').toUpperCase()}`
   }
 
   async findAll(filters?: { siteId?: string; state?: string; from?: string; to?: string }) {
-    return this.prisma.dailyReport.findMany({
+    const reports = await this.prisma.dailyReport.findMany({
       where: {
         ...(filters?.siteId && { siteId: filters.siteId }),
         ...(filters?.state  && { state: filters.state as any }),
@@ -33,6 +37,12 @@ export class DailyReportsService {
       orderBy: { date: 'desc' },
       take: 200,
     })
+    const submitterIds = [...new Set(reports.map(r => r.submittedBy).filter(Boolean))] as string[]
+    const users = submitterIds.length > 0
+      ? await this.prisma.user.findMany({ where: { id: { in: submitterIds } }, select: { id: true, firstName: true, lastName: true, role: true } })
+      : []
+    const userMap = new Map(users.map(u => [u.id, u]))
+    return reports.map(r => ({ ...r, submitter: r.submittedBy ? userMap.get(r.submittedBy) ?? null : null }))
   }
 
   async findOne(id: string) {
@@ -45,13 +55,17 @@ export class DailyReportsService {
       },
     })
     if (!r) throw new NotFoundException('Rapport quotidien introuvable')
-    return r
+    let submitter = null
+    if (r.submittedBy) {
+      submitter = await this.prisma.user.findUnique({ where: { id: r.submittedBy }, select: { id: true, firstName: true, lastName: true, role: true, email: true } })
+    }
+    return { ...r, submitter }
   }
 
   async create(data: any) {
     const date = data.date ? new Date(data.date) : new Date()
     date.setHours(0, 0, 0, 0)
-    return this.prisma.dailyReport.create({
+    const report = await this.prisma.dailyReport.create({
       data: {
         reference: this.nextRef(),
         date,
@@ -75,6 +89,17 @@ export class DailyReportsService {
         submittedBy: data.submittedBy ?? null,
       },
     })
+
+    // Notifier le chef des opérations et le DG
+    const site = await this.prisma.site.findUnique({ where: { id: data.siteId }, select: { name: true } })
+    let creatorName = 'Un utilisateur'
+    if (data.submittedBy) {
+      const creator = await this.prisma.user.findUnique({ where: { id: data.submittedBy }, select: { firstName: true, lastName: true } })
+      if (creator) creatorName = `${creator.firstName} ${creator.lastName}`
+    }
+    this.notifications.notifyNewDailyReport(report, site?.name ?? 'inconnu', creatorName).catch(() => {})
+
+    return report
   }
 
   async update(id: string, data: any) {
@@ -127,5 +152,13 @@ export class DailyReportsService {
 
   async reset(id: string) {
     return this.prisma.dailyReport.update({ where: { id }, data: { state: 'BROUILLON' } })
+  }
+
+  async updatePhoto(id: string, photoUrl: string) {
+    await this.findOne(id)
+    return this.prisma.dailyReport.update({
+      where: { id },
+      data: { attachmentUrls: { push: photoUrl } },
+    })
   }
 }

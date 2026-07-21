@@ -70,21 +70,45 @@ export class HrService {
     }
   }
 
-  async generateMonthlyPayroll(month: number, year: number) {
+  async generateMonthlyPayroll(month: number, year: number, agentIds?: string[]) {
     const existing = await this.prisma.payroll.findUnique({ where: { month_year: { month, year } } })
     if (existing) throw new BadRequestException('Paie déjà générée pour ce mois')
 
     const agents = await this.prisma.agent.findMany({
-      where: { status: 'EN_POSTE' },
+      where: { status: 'EN_POSTE', ...(agentIds && agentIds.length > 0 && { id: { in: agentIds } }) },
       select: { id: true, baseSalary: true },
     })
 
-    // Calculer chaque ligne avec la vraie logique
-    const linesData = agents.map(a => {
+    // Période du mois
+    const monthStart = new Date(year, month - 1, 1)
+    const monthEnd = new Date(year, month, 1)
+
+    // Pour chaque agent, compter les jours travaillés depuis les pointages
+    const linesData = await Promise.all(agents.map(async a => {
       const base = Number(a.baseSalary ?? 0)
-      const slip = this.computePayslip(base, 26, 0) // 26 jours, 0 heures supp par défaut
-      return { agentId: a.id, ...slip }
-    })
+      const pointages = await this.prisma.pointage.findMany({
+        where: {
+          agentId: a.id,
+          date: { gte: monthStart, lt: monthEnd },
+          status: { in: ['TERMINE', 'EN_COURS', 'PRESENT', 'RETARD', 'JUSTIFIE'] },
+        },
+        select: { date: true },
+      })
+      // Compter les jours uniques (un agent peut avoir 2 vacations/jour)
+      const uniqueDays = new Set(pointages.map(p => p.date.toISOString().split('T')[0]))
+      const daysWorked = uniqueDays.size
+
+      return {
+        agentId: a.id,
+        daysWorked,
+        hoursWorked: daysWorked * 8,
+        baseSalary: base,
+        bonuses: 0,
+        deductions: 0,
+        grossSalary: base,
+        netSalary: base,
+      }
+    }))
 
     const totalBrut = linesData.reduce((s, l) => s + l.grossSalary, 0)
     const totalNet  = linesData.reduce((s, l) => s + l.netSalary, 0)
@@ -122,6 +146,109 @@ export class HrService {
 
   async markPayrollPaid(payrollId: string) {
     return this.prisma.payroll.update({ where: { id: payrollId }, data: { status: 'PAYE' } })
+  }
+
+  async deletePayroll(payrollId: string) {
+    const payroll = await this.prisma.payroll.findUnique({ where: { id: payrollId } })
+    if (!payroll) throw new NotFoundException('Paie introuvable')
+    if (payroll.status === 'PAYE') throw new BadRequestException('Impossible de supprimer une paie déjà payée')
+    return this.prisma.payroll.delete({ where: { id: payrollId } })
+  }
+
+  // ── Détail d'une paie (toutes les lignes avec détails agents) ──
+  async getPayrollDetail(payrollId: string) {
+    const payroll = await this.prisma.payroll.findUnique({
+      where: { id: payrollId },
+      include: {
+        lines: {
+          include: {
+            agent: {
+              include: {
+                user: { select: { firstName: true, lastName: true, phone: true, email: true } },
+                deployments: { where: { isActive: true }, select: { site: { select: { name: true } } }, take: 1 },
+              },
+            },
+          },
+          orderBy: { agent: { user: { lastName: 'asc' } } },
+        },
+      },
+    })
+    if (!payroll) throw new NotFoundException('Paie introuvable')
+    return payroll
+  }
+
+  // ── Modifier une ligne de paie (primes, retenues, jours, etc.) ──
+  async updatePayrollLine(lineId: string, data: {
+    daysWorked?: number
+    baseSalary?: number
+    bonuses?: number
+    deductions?: number
+    notes?: string
+  }) {
+    const line = await this.prisma.payrollLine.findUnique({ where: { id: lineId } })
+    if (!line) throw new NotFoundException('Ligne de paie introuvable')
+
+    const daysWorked = data.daysWorked ?? line.daysWorked
+    const baseSalary = data.baseSalary ?? Number(line.baseSalary)
+    const bonuses = data.bonuses ?? Number(line.bonuses)
+    const deductions = data.deductions ?? Number(line.deductions)
+
+    // Recalculer brut et net
+    const dailyRate = baseSalary / 26
+    const salaireBrutBase = Math.round(dailyRate * daysWorked)
+    const brut = salaireBrutBase + bonuses
+    const net = Math.max(brut - deductions, 0)
+
+    const updated = await this.prisma.payrollLine.update({
+      where: { id: lineId },
+      data: {
+        daysWorked,
+        baseSalary,
+        bonuses,
+        deductions,
+        grossSalary: brut,
+        netSalary: net,
+        hoursWorked: daysWorked * 8,
+        notes: data.notes ?? line.notes,
+      },
+    })
+
+    // Recalculer les totaux du payroll parent
+    await this.recalcPayrollTotals(line.payrollId)
+
+    return updated
+  }
+
+  // ── Bloquer / débloquer la paie d'un employé ──
+  async toggleBlockPayrollLine(lineId: string, blocked: boolean, reason?: string) {
+    const line = await this.prisma.payrollLine.findUnique({ where: { id: lineId } })
+    if (!line) throw new NotFoundException('Ligne de paie introuvable')
+
+    const updated = await this.prisma.payrollLine.update({
+      where: { id: lineId },
+      data: {
+        blocked,
+        blockReason: blocked ? (reason ?? 'Bloqué') : null,
+        netSalary: blocked ? 0 : Math.max(Number(line.grossSalary) - Number(line.deductions), 0),
+      },
+    })
+
+    await this.recalcPayrollTotals(line.payrollId)
+
+    return updated
+  }
+
+  private async recalcPayrollTotals(payrollId: string) {
+    const lines = await this.prisma.payrollLine.findMany({
+      where: { payrollId },
+      select: { grossSalary: true, netSalary: true },
+    })
+    const totalBrut = lines.reduce((s, l) => s + Number(l.grossSalary), 0)
+    const totalNet = lines.reduce((s, l) => s + Number(l.netSalary), 0)
+    await this.prisma.payroll.update({
+      where: { id: payrollId },
+      data: { totalBrut, totalNet },
+    })
   }
 
   // ── Congés ──────────────────────────────────────────────────────

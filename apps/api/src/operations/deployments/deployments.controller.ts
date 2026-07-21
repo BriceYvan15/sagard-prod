@@ -46,4 +46,10 @@ export class DeploymentsController {
   replace(@Param('id') id: string, @Body() body: { replacementAgentId: string; startDate?: string }) {
     return this.deployments.replace(id, body)
   }
+
+  @Post(':id/transfer')
+  @ApiOperation({ summary: "Muter l'agent vers un autre site (avec motif)" })
+  transfer(@Param('id') id: string, @Body() body: { toSiteId: string; motif: string; transferDate?: string }) {
+    return this.deployments.transfer(id, body)
+  }
 }

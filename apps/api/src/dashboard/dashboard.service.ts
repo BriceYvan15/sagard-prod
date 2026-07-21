@@ -20,10 +20,10 @@ export class DashboardService {
       this.prisma.clientContract.count({ where: { status: 'ACTIF' } }),
       this.prisma.site.count({ where: { status: 'ACTIF' } }),
       this.prisma.agent.count({ where: { status: 'EN_POSTE' } }),
-      this.prisma.invoice.count({ where: { status: 'RETARD' } }),
+      this.prisma.invoice.count({ where: { type: 'FACTURE', status: 'RETARD' } }),
       this.prisma.pointage.count({ where: { checkInTime: { gte: today } } }),
       this.prisma.invoice.findMany({
-        where: { status: 'RETARD' },
+        where: { type: 'FACTURE', status: 'RETARD' },
         include: { client: { select: { name: true } } },
         orderBy: { dueDate: 'asc' },
         take: 5,
@@ -62,7 +62,7 @@ export class DashboardService {
 
       const agg = await this.prisma.invoice.aggregate({
         _sum: { totalAmount: true },
-        where: { type: 'FACTURE', status: 'PAYEE', paidAt: { gte: start, lt: end } },
+        where: { type: 'FACTURE', status: 'PAYEE', issueDate: { gte: start, lt: end } },
       })
 
       months.push({ month: format(start, 'MMM yy'), amount: Number(agg._sum.totalAmount ?? 0) })

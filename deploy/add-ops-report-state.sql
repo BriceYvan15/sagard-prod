@@ -1,0 +1,1 @@
+CREATE TYPE "OpsReportState" AS ENUM ('PENDING', 'SOUMIS', 'VALIDE', 'REJETE');

@@ -13,8 +13,8 @@ export class AccountingService {
 
     // Revenus: factures payées
     const invoicesPaid = await this.prisma.invoice.findMany({
-      where: { status: 'PAYEE', paidAt: { gte: startOfYear, lt: endOfYear } },
-      select: { totalAmount: true, paidAt: true, paidAmount: true },
+      where: { type: 'FACTURE', status: 'PAYEE', issueDate: { gte: startOfYear, lt: endOfYear } },
+      select: { totalAmount: true, issueDate: true, paidAmount: true },
     })
     const totalRevenue = invoicesPaid.reduce((s, i) => s + Number(i.paidAmount ?? i.totalAmount), 0)
 
@@ -25,13 +25,13 @@ export class AccountingService {
       amount: 0,
     }))
     for (const inv of invoicesPaid) {
-      const m = new Date(inv.paidAt!).getMonth()
+      const m = new Date(inv.issueDate!).getMonth()
       revenueByMonth[m].amount += Number(inv.paidAmount ?? inv.totalAmount)
     }
 
     // Factures en attente
     const invoicesPending = await this.prisma.invoice.aggregate({
-      where: { status: { in: ['ENVOYEE', 'RETARD'] } },
+      where: { type: 'FACTURE', status: { in: ['ENVOYEE', 'RETARD'] } },
       _sum: { totalAmount: true },
       _count: true,
     })
@@ -61,7 +61,20 @@ export class AccountingService {
     const totalFuel = Number(fuelCosts._sum.totalCost ?? 0)
     const totalMaintenance = Number(maintenanceCosts._sum.cost ?? 0)
 
-    const totalExpenses = totalSalaries + totalFuel + totalMaintenance
+    // Dépenses manuelles (saisies depuis la compta)
+    const manualExpenses = await this.prisma.auditLog.findMany({
+      where: {
+        entity: 'ManualExpense',
+        createdAt: { gte: startOfYear, lt: endOfYear },
+      },
+      select: { newData: true },
+    })
+    const totalManualExpenses = manualExpenses.reduce((s, e) => {
+      const data = e.newData as any
+      return s + Number(data?.amount ?? 0)
+    }, 0)
+
+    const totalExpenses = totalSalaries + totalFuel + totalMaintenance + totalManualExpenses
     const netResult = totalRevenue - totalExpenses
 
     return {
@@ -74,13 +87,14 @@ export class AccountingService {
         salaryByMonth,
         fuel: totalFuel,
         maintenance: totalMaintenance,
+        manual: totalManualExpenses,
       },
       netResult,
       margin: totalRevenue > 0 ? Math.round((netResult / totalRevenue) * 100) : 0,
     }
   }
 
-  // ── Journal comptable (écritures virtuelles) ─────────────
+  // ── Journal comptable (écritures en double-partie) ─────────────
   async getJournal(filters?: { year?: number; month?: number; type?: string }) {
     const y = filters?.year ?? new Date().getFullYear()
     const m = filters?.month
@@ -89,7 +103,8 @@ export class AccountingService {
 
     const entries: any[] = []
 
-    // Factures émises → Produits (ventes)
+    // 1. Factures émises → Vente (reconnaissance du revenu)
+    //    Débit: 4111 — Clients  /  Crédit: 7011 — Ventes prestations
     if (!filters?.type || filters.type === 'VENTE') {
       const invoices = await this.prisma.invoice.findMany({
         where: {
@@ -106,40 +121,51 @@ export class AccountingService {
           type: 'VENTE',
           reference: inv.reference,
           description: `Facture ${inv.reference} — ${inv.client?.name ?? 'N/A'}`,
-          debit: inv.status === 'PAYEE' ? 0 : Number(inv.totalAmount),
-          credit: inv.status === 'PAYEE' ? Number(inv.totalAmount) : 0,
-          account: inv.status === 'PAYEE' ? '7011 — Ventes prestations sécurité' : '4111 — Clients',
+          nature: 'Vente de prestation — la facture est émise au client (pas encore d\'argent en banque)',
+          debitAccount: '4111 — Clients',
+          creditAccount: '7011 — Ventes prestations sécurité',
+          amount: Number(inv.totalAmount),
+          cashImpact: 0,
           status: inv.status,
         })
       }
     }
 
-    // Paiements reçus
+    // 2. Encaissements → Paiement reçu d'un client (inclut acomptes)
+    //    Débit: 5211 — Banque  /  Crédit: 4111 — Clients
     if (!filters?.type || filters.type === 'ENCAISSEMENT') {
-      const paid = await this.prisma.invoice.findMany({
+      const payments = await this.prisma.payment.findMany({
         where: {
           paidAt: { gte: startDate, lt: endDate },
-          status: 'PAYEE',
+          invoice: { type: 'FACTURE' },
         },
-        include: { client: { select: { name: true } } },
+        include: { invoice: { include: { client: { select: { name: true } } } } },
         orderBy: { paidAt: 'asc' },
       })
-      for (const inv of paid) {
+      for (const pay of payments) {
+        const amt = Number(pay.amount)
+        const inv = pay.invoice
+        const isPartial = inv.status === 'PARTIELLEMENT_PAYEE'
         entries.push({
-          id: `PAY-${inv.id}`,
-          date: inv.paidAt,
+          id: `PAY-${pay.id}`,
+          date: pay.paidAt,
           type: 'ENCAISSEMENT',
           reference: inv.reference,
           description: `Encaissement ${inv.reference} — ${inv.client?.name ?? 'N/A'}`,
-          debit: 0,
-          credit: Number(inv.paidAmount ?? inv.totalAmount),
-          account: '5211 — Banque',
-          status: 'PAYEE',
+          nature: isPartial
+            ? 'Acompte — paiement partiel reçu du client (le reste reste en créance)'
+            : 'Encaissement — le client a payé, l\'argent entre en banque',
+          debitAccount: '5211 — Banque',
+          creditAccount: '4111 — Clients',
+          amount: amt,
+          cashImpact: amt,
+          status: inv.status,
         })
       }
     }
 
-    // Salaires
+    // 3. Salaires → Charge de personnel
+    //    Débit: 6611 — Rémunérations  /  Crédit: 5211 — Banque
     if (!filters?.type || filters.type === 'SALAIRE') {
       const payrolls = await this.prisma.payroll.findMany({
         where: {
@@ -150,21 +176,25 @@ export class AccountingService {
         orderBy: { month: 'asc' },
       })
       for (const p of payrolls) {
+        const amt = Number(p.totalBrut)
         entries.push({
           id: `SAL-${p.id}`,
           date: p.processedAt ?? new Date(p.year, p.month - 1, 28),
           type: 'SALAIRE',
           reference: `PAIE-${String(p.month).padStart(2, '0')}/${p.year}`,
           description: `Masse salariale ${String(p.month).padStart(2, '0')}/${p.year}`,
-          debit: Number(p.totalBrut),
-          credit: 0,
-          account: '6611 — Rémunérations du personnel',
+          nature: 'Charge salariale — paiement des salaires (sortie de banque)',
+          debitAccount: '6611 — Rémunérations du personnel',
+          creditAccount: '5211 — Banque',
+          amount: amt,
+          cashImpact: -amt,
           status: p.status,
         })
       }
     }
 
-    // Carburant
+    // 4. Carburant → Charge d'exploitation
+    //    Débit: 6055 — Carburant  /  Crédit: 5211 — Banque
     if (!filters?.type || filters.type === 'CARBURANT') {
       const fuels = await this.prisma.fuelLog.findMany({
         where: { date: { gte: startDate, lt: endDate } },
@@ -172,21 +202,25 @@ export class AccountingService {
         orderBy: { date: 'asc' },
       })
       for (const f of fuels) {
+        const amt = Number(f.totalCost)
         entries.push({
           id: `FUEL-${f.id}`,
           date: f.date,
           type: 'CARBURANT',
           reference: f.vehicle.plateNumber,
           description: `Carburant ${f.vehicle.plateNumber} (${f.liters}L)`,
-          debit: Number(f.totalCost),
-          credit: 0,
-          account: '6055 — Fournitures carburant',
+          nature: 'Charge carburant — achat de carburant (sortie de banque)',
+          debitAccount: '6055 — Fournitures carburant',
+          creditAccount: '5211 — Banque',
+          amount: amt,
+          cashImpact: -amt,
           status: 'PAYE',
         })
       }
     }
 
-    // Maintenance
+    // 5. Maintenance → Charge d'exploitation
+    //    Débit: 6155 — Entretien véhicules  /  Crédit: 5211 — Banque
     if (!filters?.type || filters.type === 'MAINTENANCE') {
       const maints = await this.prisma.maintenance.findMany({
         where: { startDate: { gte: startDate, lt: endDate } },
@@ -195,31 +229,79 @@ export class AccountingService {
       })
       for (const m of maints) {
         if (!m.cost) continue
+        const amt = Number(m.cost)
         entries.push({
           id: `MAINT-${m.id}`,
           date: m.startDate,
           type: 'MAINTENANCE',
           reference: m.vehicle.plateNumber,
           description: `Maintenance ${m.type} — ${m.vehicle.plateNumber}`,
-          debit: Number(m.cost),
-          credit: 0,
-          account: '6155 — Entretien véhicules',
+          nature: 'Charge maintenance — entretien du véhicule (sortie de banque)',
+          debitAccount: '6155 — Entretien véhicules',
+          creditAccount: '5211 — Banque',
+          amount: amt,
+          cashImpact: -amt,
           status: 'ENREGISTRE',
         })
       }
     }
 
-    // Trier par date
-    entries.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-
-    // Solde cumulé
-    let balance = 0
-    for (const e of entries) {
-      balance += e.credit - e.debit
-      e.balance = balance
+    // 6. Dépenses manuelles → Charge diverse
+    //    Débit: [compte saisi]  /  Crédit: 5211 — Banque
+    if (!filters?.type || filters.type === 'DEPENSE') {
+      const manualExps = await this.prisma.auditLog.findMany({
+        where: {
+          entity: 'ManualExpense',
+          createdAt: { gte: startDate, lt: endDate },
+        },
+        include: { user: { select: { firstName: true, lastName: true } } },
+        orderBy: { createdAt: 'asc' },
+      })
+      for (const exp of manualExps) {
+        const data = exp.newData as any
+        const amt = Number(data?.amount ?? 0)
+        entries.push({
+          id: `EXP-${exp.id}`,
+          date: data?.date ? new Date(data.date) : exp.createdAt,
+          type: 'DEPENSE',
+          reference: data?.reference ?? '—',
+          description: data?.description ?? 'Dépense',
+          nature: 'Dépense manuelle — charge saisie manuellement (sortie de banque)',
+          debitAccount: data?.account ?? '6581 — Charges diverses',
+          creditAccount: '5211 — Banque',
+          amount: amt,
+          cashImpact: -amt,
+          status: 'ENREGISTRE',
+        })
+      }
     }
 
-    return { year: y, month: m, entries, totals: { debit: entries.reduce((s, e) => s + e.debit, 0), credit: entries.reduce((s, e) => s + e.credit, 0), balance } }
+    // Trier par date (du plus récent au plus ancien)
+    entries.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+
+    // Trésorerie cumulée (impact cash uniquement, calculée du plus ancien au plus récent)
+    const chronological = [...entries].reverse()
+    let treasury = 0
+    for (const e of chronological) {
+      treasury += e.cashImpact
+      e.treasury = treasury
+    }
+
+    const totalAmount = entries.reduce((s, e) => s + e.amount, 0)
+    const totalCashIn = entries.filter(e => e.cashImpact > 0).reduce((s, e) => s + e.cashImpact, 0)
+    const totalCashOut = entries.filter(e => e.cashImpact < 0).reduce((s, e) => s + Math.abs(e.cashImpact), 0)
+
+    return {
+      year: y,
+      month: m,
+      entries,
+      totals: {
+        amount: totalAmount,
+        cashIn: totalCashIn,
+        cashOut: totalCashOut,
+        netCash: treasury,
+      },
+    }
   }
 
   // ── Enregistrer un paiement sur une facture ─────────────
@@ -227,14 +309,14 @@ export class AccountingService {
     const invoice = await this.prisma.invoice.findUnique({ where: { id: invoiceId } })
     if (!invoice) throw new Error('Facture introuvable')
 
-    const paidAmount = data.amount ?? Number(invoice.totalAmount)
+    const paymentAmount = data.amount ?? Number(invoice.totalAmount)
     const paidAt = data.paymentDate ? new Date(data.paymentDate) : new Date()
 
     // Create a Payment record
     const payment = await this.prisma.payment.create({
       data: {
         invoiceId,
-        amount: paidAmount,
+        amount: paymentAmount,
         method: data.paymentMethod ?? 'VIREMENT',
         reference: data.reference ?? null,
         paidAt,
@@ -242,22 +324,37 @@ export class AccountingService {
       },
     })
 
-    // Update invoice status
+    // Calculate cumulative paid amount from all payments
+    const allPayments = await this.prisma.payment.aggregate({
+      where: { invoiceId },
+      _sum: { amount: true },
+    })
+    const cumulativePaid = Number(allPayments._sum.amount ?? 0)
+    const totalAmount = Number(invoice.totalAmount)
+
+    // Determine new status based on cumulative paid amount
+    const newStatus = cumulativePaid >= totalAmount ? 'PAYEE' : 'PARTIELLEMENT_PAYEE'
+
+    // Update invoice
     const updated = await this.prisma.invoice.update({
       where: { id: invoiceId },
       data: {
-        status: 'PAYEE',
-        paidAt,
-        paidAmount,
+        status: newStatus,
+        paidAt: newStatus === 'PAYEE' ? paidAt : invoice.paidAt,
+        paidAmount: cumulativePaid,
+        paymentMethod: data.paymentMethod ? (data.paymentMethod as any) : invoice.paymentMethod,
       },
     })
 
     // Record in invoice history
+    const isPartial = newStatus === 'PARTIELLEMENT_PAYEE'
     await this.prisma.invoiceHistory.create({
       data: {
         invoiceId,
         action: 'PAIEMENT',
-        details: `Paiement de ${paidAmount} XOF enregistré (${data.paymentMethod ?? 'VIREMENT'})`,
+        details: isPartial
+          ? `Acompte de ${paymentAmount} XOF enregistré (${data.paymentMethod ?? 'VIREMENT'}). Reste à payer: ${totalAmount - cumulativePaid} XOF`
+          : `Paiement de ${paymentAmount} XOF enregistré (${data.paymentMethod ?? 'VIREMENT'}). Facture soldée.`,
         performedBy: userId ?? 'system',
       },
     })
@@ -268,7 +365,7 @@ export class AccountingService {
   // ── Factures impayées ──────────────────────────────────────
   async getUnpaidInvoices() {
     return this.prisma.invoice.findMany({
-      where: { status: { in: ['ENVOYEE', 'RETARD'] }, type: 'FACTURE' },
+      where: { status: { in: ['ENVOYEE', 'RETARD', 'PARTIELLEMENT_PAYEE'] }, type: 'FACTURE' },
       include: { client: { select: { name: true, code: true } } },
       orderBy: { dueDate: 'asc' },
     })
@@ -331,7 +428,7 @@ export class AccountingService {
 
     // Encaissements
     const paid = await this.prisma.invoice.findMany({
-      where: { paidAt: { gte: new Date(y, 0, 1), lt: new Date(y + 1, 0, 1) }, status: 'PAYEE' },
+      where: { type: 'FACTURE', status: 'PAYEE', paidAt: { gte: new Date(y, 0, 1), lt: new Date(y + 1, 0, 1) } },
       select: { paidAt: true, paidAmount: true, totalAmount: true },
     })
     for (const inv of paid) {
@@ -366,6 +463,22 @@ export class AccountingService {
       months[new Date(m.startDate).getMonth()].decaissements += Number(m.cost ?? 0)
     }
 
+    // Décaissements manuels (saisis depuis la compta)
+    const manualExps = await this.prisma.auditLog.findMany({
+      where: {
+        entity: 'ManualExpense',
+        createdAt: { gte: new Date(y, 0, 1), lt: new Date(y + 1, 0, 1) },
+      },
+      select: { newData: true, createdAt: true },
+    })
+    for (const exp of manualExps) {
+      const data = exp.newData as any
+      const date = data?.date ? new Date(data.date) : exp.createdAt
+      if (date.getFullYear() === y) {
+        months[date.getMonth()].decaissements += Number(data?.amount ?? 0)
+      }
+    }
+
     // Solde cumulé
     let cumul = 0
     for (const m of months) {
@@ -374,5 +487,97 @@ export class AccountingService {
     }
 
     return { year: y, months, cumulativeSolde: cumul }
+  }
+
+  // ── Plan comptable (Chart of Accounts) ───────────────────
+  async getAccounts() {
+    return this.prisma.accountingAccount.findMany({
+      where: { isActive: true },
+      orderBy: [{ sortOrder: 'asc' }, { code: 'asc' }],
+    })
+  }
+
+  async createAccount(data: { code: string; label: string }) {
+    return this.prisma.accountingAccount.create({
+      data: { code: data.code, label: data.label },
+    })
+  }
+
+  async updateAccount(id: string, data: { code?: string; label?: string }) {
+    return this.prisma.accountingAccount.update({
+      where: { id },
+      data: { ...(data.code && { code: data.code }), ...(data.label && { label: data.label }) },
+    })
+  }
+
+  async deleteAccount(id: string) {
+    return this.prisma.accountingAccount.update({
+      where: { id },
+      data: { isActive: false },
+    })
+  }
+
+  async resetAccounts() {
+    const defaults = [
+      { code: '411', label: 'Clients', sortOrder: 1 },
+      { code: '4111', label: 'Clients — Créances commerciales', sortOrder: 2 },
+      { code: '422', label: 'Personnel — Avances et acomptes', sortOrder: 3 },
+      { code: '431', label: 'Sécurité sociale', sortOrder: 4 },
+      { code: '441', label: 'État — Impôts et taxes', sortOrder: 5 },
+      { code: '521', label: 'Banque', sortOrder: 6 },
+      { code: '5211', label: 'Banque — Compte principal', sortOrder: 7 },
+      { code: '531', label: 'Caisse', sortOrder: 8 },
+      { code: '601', label: 'Achats de matières et fournitures', sortOrder: 9 },
+      { code: '602', label: 'Achats de produits semi-finis', sortOrder: 10 },
+      { code: '605', label: 'Autres achats', sortOrder: 11 },
+      { code: '6051', label: 'Fournitures non stockées (eau, électricité)', sortOrder: 12 },
+      { code: '6055', label: 'Fournitures carburant', sortOrder: 13 },
+      { code: '6061', label: 'Fournitures de bureau', sortOrder: 14 },
+      { code: '6064', label: 'Fournitures administratives', sortOrder: 15 },
+      { code: '613', label: 'Locations', sortOrder: 16 },
+      { code: '6132', label: 'Locations de terrains et bâtiments', sortOrder: 17 },
+      { code: '6135', label: 'Locations de matériel et outillage', sortOrder: 18 },
+      { code: '615', label: 'Entretien et réparations', sortOrder: 19 },
+      { code: '6155', label: 'Entretien et réparation des véhicules', sortOrder: 20 },
+      { code: '616', label: 'Assurances', sortOrder: 21 },
+      { code: '6161', label: 'Assurance multirisque', sortOrder: 22 },
+      { code: '6162', label: 'Assurance responsabilité civile', sortOrder: 23 },
+      { code: '6163', label: 'Assurance flotte automobile', sortOrder: 24 },
+      { code: '621', label: 'Transports de biens et personnes', sortOrder: 25 },
+      { code: '625', label: 'Déplacements, missions et réceptions', sortOrder: 26 },
+      { code: '626', label: 'Frais postaux et de télécommunications', sortOrder: 27 },
+      { code: '6261', label: 'Téléphone', sortOrder: 28 },
+      { code: '6262', label: 'Internet et communications', sortOrder: 29 },
+      { code: '627', label: 'Services bancaires', sortOrder: 30 },
+      { code: '6271', label: 'Frais bancaires', sortOrder: 31 },
+      { code: '631', label: 'Impôts et taxes', sortOrder: 32 },
+      { code: '6311', label: 'Impôts et taxes directs', sortOrder: 33 },
+      { code: '633', label: 'Impôts et taxes indirects', sortOrder: 34 },
+      { code: '641', label: 'Rémunérations du personnel', sortOrder: 35 },
+      { code: '6411', label: 'Salaires de base', sortOrder: 36 },
+      { code: '6412', label: 'Primes et gratifications', sortOrder: 37 },
+      { code: '6413', label: 'Heures supplémentaires', sortOrder: 38 },
+      { code: '645', label: 'Charges sociales sur rémunérations', sortOrder: 39 },
+      { code: '6451', label: 'Cotisations CNPS', sortOrder: 40 },
+      { code: '651', label: 'Subventions et charges diverses', sortOrder: 41 },
+      { code: '658', label: 'Charges diverses', sortOrder: 42 },
+      { code: '6581', label: 'Charges diverses d\'exploitation', sortOrder: 43 },
+      { code: '661', label: 'Charges de personnel', sortOrder: 44 },
+      { code: '6611', label: 'Rémunérations du personnel', sortOrder: 45 },
+      { code: '701', label: 'Ventes de produits finis', sortOrder: 46 },
+      { code: '706', label: 'Prestations de services', sortOrder: 47 },
+      { code: '7061', label: 'Prestations de gardiennage', sortOrder: 48 },
+      { code: '7062', label: 'Prestations de sécurité électronique', sortOrder: 49 },
+      { code: '7063', label: 'Prestations de protection rapprochée', sortOrder: 50 },
+      { code: '7064', label: 'Prestations de surveillance événementielle', sortOrder: 51 },
+      { code: '7065', label: 'Prestations d\'installation et maintenance', sortOrder: 52 },
+      { code: '7011', label: 'Ventes prestations sécurité', sortOrder: 53 },
+    ]
+
+    // Delete all existing accounts, then recreate
+    await this.prisma.accountingAccount.deleteMany({})
+    await this.prisma.accountingAccount.createMany({ data: defaults })
+
+    return { count: defaults.length }
   }
 }

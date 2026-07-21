@@ -27,7 +27,7 @@ export class AgentsService {
       },
       include: {
         user:  { select: { id: true, firstName: true, lastName: true, phone: true, email: true, photoUrl: true, status: true } },
-        deployments: { where: { isActive: true }, select: { id: true, site: { select: { id: true, name: true, district: true } } } },
+        deployments: { where: { isActive: true }, select: { id: true, site: { select: { id: true, name: true, district: true, latitude: true, longitude: true, address: true } } } },
         equipments: { where: { returnedAt: null }, select: { id: true, equipment: { select: { name: true, code: true } } } },
       },
       orderBy: { matricule: 'asc' },

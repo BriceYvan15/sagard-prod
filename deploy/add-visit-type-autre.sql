@@ -1,0 +1,1 @@
+ALTER TYPE "ControlVisitType" ADD VALUE IF NOT EXISTS 'AUTRE';

@@ -12,6 +12,10 @@ export class PointagesService {
   ) {}
 
   async checkIn(agentId: string, dto: CheckInDto & { contractId?: string; deploymentId?: string; controllerId?: string; pointingMethod?: string }) {
+    // Vérifier que l'agent existe
+    const agent = await this.prisma.agent.findUnique({ where: { id: agentId } })
+    if (!agent) throw new BadRequestException('Agent introuvable. Votre compte n\'est pas lié à un agent actif.')
+
     const today = new Date()
     today.setHours(0, 0, 0, 0)
 
@@ -19,7 +23,7 @@ export class PointagesService {
       where: { agentId, date: today, shift: dto.shift as any, status: { in: ['EN_COURS', 'PRESENT', 'RETARD'] as any } },
     })
     if (existing) throw new BadRequestException('Un pointage est déjà en cours pour cette vacation')
-    if (!dto.photoUrl) throw new BadRequestException('La photo de prise de poste est obligatoire')
+    // photoUrl is now optional - GPS-only pointage supported
 
     // Auto-link au déploiement actif si non fourni
     let deploymentId = dto.deploymentId ?? null
@@ -37,6 +41,11 @@ export class PointagesService {
       if (dep) { deploymentId = dep.id; siteId = siteId ?? dep.siteId; contractId = contractId ?? dep.contractId }
     }
 
+    // Bloquer le pointage si aucune affectation active
+    if (!deploymentId) {
+      throw new BadRequestException('Aucune affectation active trouvée. Vous devez être affecté à un site pour pointer.')
+    }
+
     const now = new Date()
     const lateMin = this.computeLateMinutes(dto.shift, now)
     const isLate = lateMin > 0
@@ -50,7 +59,7 @@ export class PointagesService {
         controllerId: dto.controllerId ?? null,
         date: today,
         checkInTime: now,
-        checkInPhoto: dto.photoUrl,
+        checkInPhoto: dto.photoUrl || null,
         checkInLat: dto.latitude,
         checkInLng: dto.longitude,
         shift: dto.shift as any,
@@ -75,7 +84,7 @@ export class PointagesService {
     if (!pointage) throw new BadRequestException('Pointage introuvable')
     if (pointage.agentId !== agentId) throw new ForbiddenException()
     if (pointage.status === 'TERMINE') throw new BadRequestException('Pointage déjà terminé')
-    if (!dto.photoUrl) throw new BadRequestException('La photo de fin de service est obligatoire')
+    // photoUrl is now optional - GPS-only checkout supported
 
     const now = new Date()
     const hoursWorked = pointage.checkInTime
@@ -94,6 +103,23 @@ export class PointagesService {
         hoursWorked,
         overtimeHours: Math.round(overtime * 100) / 100,
         status: 'TERMINE',
+      },
+    })
+  }
+
+  /** Mise à jour position GPS en cours de poste (tracking horaire) */
+  async updatePosition(agentId: string, pointageId: string, dto: { latitude?: number; longitude?: number }) {
+    const pointage = await this.prisma.pointage.findUnique({ where: { id: pointageId } })
+    if (!pointage) throw new BadRequestException('Pointage introuvable')
+    if (pointage.agentId !== agentId) throw new ForbiddenException()
+    if (pointage.status === 'TERMINE') throw new BadRequestException('Pointage déjà terminé')
+
+    return this.prisma.pointage.update({
+      where: { id: pointageId },
+      data: {
+        currentLat: dto.latitude ?? null,
+        currentLng: dto.longitude ?? null,
+        lastPositionAt: new Date(),
       },
     })
   }
@@ -145,9 +171,9 @@ export class PointagesService {
       },
       include: {
         agent: {
-          select: { id: true, matricule: true, user: { select: { firstName: true, lastName: true, phone: true, photoUrl: true } } },
+          select: { id: true, matricule: true, shift: true, user: { select: { firstName: true, lastName: true, phone: true, photoUrl: true } } },
         },
-        deployment: { select: { id: true, reference: true, site: { select: { id: true, name: true, code: true } } } },
+        deployment: { select: { id: true, reference: true, site: { select: { id: true, name: true, code: true, latitude: true, longitude: true, address: true, district: true } } } },
       },
       orderBy: { checkInTime: 'desc' },
     })
