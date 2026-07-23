@@ -55,8 +55,8 @@ jobs:
           # rsync -az -e "$SSH" package.json pnpm-lock.yaml apps/api/package.json root@"$HOST":/opt/sagard/api/
           # $SSH root@"$HOST" "cd /opt/sagard/api && pnpm install --prod --frozen-lockfile"
 
-          # --- OPTIONNEL : à activer quand le schéma Prisma change (nouvelles migrations) ---
-          # $SSH root@"$HOST" "cd /opt/sagard/api && pnpm exec prisma migrate deploy --schema=packages/database/prisma/schema.prisma"
+          # --- Migration Prisma : applique les nouvelles migrations à chaque déploiement ---
+          $SSH root@"$HOST" "cd /opt/sagard/api && pnpm exec prisma migrate deploy --schema=packages/database/prisma/schema.prisma"
 
           # Redémarrage du service PM2
           $SSH root@"$HOST" "pm2 restart sagard-api --update-env"

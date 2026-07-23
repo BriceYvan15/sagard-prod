@@ -32,6 +32,7 @@ import { StorageModule } from './storage/storage.module'
 import { GatewayModule } from './gateway/gateway.module'
 import { DashboardModule } from './dashboard/dashboard.module'
 import { AccountingModule } from './accounting/accounting.module'
+import { TreasuryModule } from './treasury/treasury.module'
 import { AuditModule } from './audit/audit.module'
 import { SettingsModule } from './settings/settings.module'
 import { MailModule } from './mail/mail.module'
@@ -83,6 +84,7 @@ import { MailModule } from './mail/mail.module'
     GatewayModule,
     DashboardModule,
     AccountingModule,
+    TreasuryModule,
     AuditModule,
     SettingsModule,
     MailModule,
