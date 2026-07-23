@@ -61,7 +61,7 @@ jobs:
           # $SSH root@"$HOST" "cd /opt/sagard/api && pnpm install --prod --frozen-lockfile"
 
           # --- Migration Prisma : applique les nouvelles migrations à chaque déploiement ---
-          $SSH root@"$HOST" "cd /opt/sagard/api && npx prisma migrate deploy --schema=packages/database/prisma/schema.prisma"
+          $SSH root@"$HOST" "cd /opt/sagard/api && npx prisma@5.22.0 migrate deploy --schema=packages/database/prisma/schema.prisma"
 
           # Redémarrage du service PM2
           $SSH root@"$HOST" "pm2 restart sagard-api --update-env"
