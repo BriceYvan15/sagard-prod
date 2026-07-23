@@ -1,9 +1,10 @@
 ﻿import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common'
 import { PrismaService } from '../../prisma/prisma.service'
+import { TreasuryService } from '../../treasury/treasury.service'
 
 @Injectable()
 export class InvoicesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private treasury: TreasuryService) {}
 
   async findAll(filters?: { clientId?: string; status?: string; type?: string; month?: string }, user?: { id: string; role: string }) {
     const where: any = {}
@@ -219,7 +220,17 @@ export class InvoicesService {
   async markPaid(id: string, paymentMethod: string) {
     const inv = await this.findOne(id)
     if (inv.status === 'PAYEE') throw new BadRequestException('Facture déjà payée')
-    return this.prisma.invoice.update({
+
+    const payment = await this.prisma.payment.create({
+      data: {
+        invoiceId: id,
+        amount: Number(inv.totalAmount),
+        method: paymentMethod,
+        paidAt: new Date(),
+      },
+    })
+
+    const updated = await this.prisma.invoice.update({
       where: { id },
       data: {
         status: 'PAYEE',
@@ -228,6 +239,13 @@ export class InvoicesService {
         paymentMethod: paymentMethod as any ?? undefined,
       },
     })
+
+    // Auto-credit treasury account
+    try {
+      await this.treasury.creditFromPayment(payment.id, paymentMethod, Number(inv.totalAmount))
+    } catch (e) {}
+
+    return updated
   }
 
   async markOverdue() {

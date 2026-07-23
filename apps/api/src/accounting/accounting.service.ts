@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
+import { TreasuryService } from '../treasury/treasury.service'
 
 @Injectable()
 export class AccountingService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private treasury: TreasuryService) {}
 
   // ── Dashboard financier ──────────────────────────────────
   async getDashboard(year?: number) {
@@ -353,11 +354,18 @@ export class AccountingService {
         invoiceId,
         action: 'PAIEMENT',
         details: isPartial
-          ? `Acompte de ${paymentAmount} XOF enregistré (${data.paymentMethod ?? 'VIREMENT'}). Reste à payer: ${totalAmount - cumulativePaid} XOF`
-          : `Paiement de ${paymentAmount} XOF enregistré (${data.paymentMethod ?? 'VIREMENT'}). Facture soldée.`,
+          ? `Acompte de ${paymentAmount} XOF enregistré (${data.paymentMethod ?? 'ESPECE'}). Reste à payer: ${totalAmount - cumulativePaid} XOF`
+          : `Paiement de ${paymentAmount} XOF enregistré (${data.paymentMethod ?? 'ESPECE'}). Facture soldée.`,
         performedBy: userId ?? 'system',
       },
     })
+
+    // Auto-credit treasury account
+    try {
+      await this.treasury.creditFromPayment(payment.id, data.paymentMethod ?? 'ESPECE', paymentAmount, data.reference)
+    } catch (e) {
+      // Treasury credit is non-blocking — payment still succeeds
+    }
 
     return { payment, invoice: updated }
   }
