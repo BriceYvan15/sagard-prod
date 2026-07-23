@@ -63,6 +63,8 @@ jobs:
           # --- Migration Prisma : marquer les migrations échouées comme résolues, puis appliquer ---
           $SSH root@"$HOST" "cd /opt/sagard/api && npx prisma@5.22.0 migrate resolve --rolled-back 20260723160000_treasury_management --schema=packages/database/prisma/schema.prisma 2>/dev/null || true"
           $SSH root@"$HOST" "cd /opt/sagard/api && npx prisma@5.22.0 migrate deploy --schema=packages/database/prisma/schema.prisma"
+          # Régénérer le client Prisma sur le serveur avec le nouveau schéma
+          $SSH root@"$HOST" "cd /opt/sagard/api && npx prisma@5.22.0 generate --schema=packages/database/prisma/schema.prisma"
 
           # Redémarrage du service PM2
           $SSH root@"$HOST" "pm2 restart sagard-api --update-env"
