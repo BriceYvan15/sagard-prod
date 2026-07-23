@@ -87,8 +87,7 @@ cd apps/web && pnpm dev    # Web → http://localhost:3000
 ## 🔑 Comptes par défaut (après seed)
 
 | Rôle                | Email                     | Mot de passe  |
-|---------------------|---------------------------|---------------|
-| Directeur Général   | dg@sagard.ci              | sagard2024!   |
+|---------------------|---------------------------|---------------|   |
 | Commercial          | commercial@sagard.ci      | sagard2024!   |
 | Comptable           | comptable@sagard.ci       | sagard2024!   |
 | RH                  | rh@sagard.ci              | sagard2024!   |
