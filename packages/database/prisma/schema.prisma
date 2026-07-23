@@ -73,9 +73,15 @@ enum ShiftCount {
 }
 
 enum PaymentMethod {
-  CHEQUE
-  VIREMENT_BANCAIRE
-  MOBILE_MONEY
+  CHEQUE_NSIA
+  VIREMENT_NSIA
+  CHEQUE_BOA
+  VIREMENT_BOA
+  CHEQUE_ECOBANK
+  VIREMENT_ECOBANK
+  WAVE
+  ORANGE_MONEY
+  DJAMO
   ESPECE
 }
 
@@ -864,16 +870,19 @@ model InvoiceLine {
 }
 
 model Payment {
-  id          String   @id @default(uuid())
-  invoiceId   String
-  invoice     Invoice  @relation(fields: [invoiceId], references: [id])
-  amount      Decimal  @db.Decimal(15, 2)
-  currency    String   @default("XOF")
-  method      String
-  reference   String?
-  paidAt      DateTime @default(now())
-  recordedBy  String?
-  notes       String?
+  id                  String   @id @default(uuid())
+  invoiceId           String
+  invoice             Invoice  @relation(fields: [invoiceId], references: [id])
+  amount              Decimal  @db.Decimal(15, 2)
+  currency            String   @default("XOF")
+  method              String
+  reference           String?
+  paidAt              DateTime @default(now())
+  recordedBy          String?
+  notes               String?
+  treasuryAccountId   String?
+  treasuryAccount     TreasuryAccount? @relation(fields: [treasuryAccountId], references: [id])
+  treasuryTransaction TreasuryTransaction?
 
   @@map("payments")
 }
@@ -1900,3 +1909,41 @@ model AccountingAccount {
   @@map("accounting_accounts")
 }
 
+// ══════════════════════════════════════════════════════════
+//  TRÉSORERIE — Comptes et transactions
+// ══════════════════════════════════════════════════════════
+
+model TreasuryAccount {
+  id              String   @id @default(uuid())
+  name            String
+  type            String   // BANQUE, CAISSE, MOBILE_MONEY
+  bankName        String?
+  accountNumber   String?
+  balance         Decimal  @db.Decimal(15, 2) @default(0)
+  currency        String   @default("XOF")
+  paymentMethods  String[] // PaymentMethod values that credit this account
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  payments        Payment[]
+  transactions    TreasuryTransaction[]
+
+  @@map("treasury_accounts")
+}
+
+model TreasuryTransaction {
+  id                String   @id @default(uuid())
+  treasuryAccountId String
+  treasuryAccount   TreasuryAccount @relation(fields: [treasuryAccountId], references: [id])
+  type              String   // CREDIT, DEBIT
+  amount            Decimal  @db.Decimal(15, 2)
+  description       String?
+  paymentId         String?  @unique
+  payment           Payment? @relation(fields: [paymentId], references: [id])
+  reference         String?
+  createdAt         DateTime @default(now())
+
+  @@index([treasuryAccountId, createdAt])
+  @@map("treasury_transactions")
+}
