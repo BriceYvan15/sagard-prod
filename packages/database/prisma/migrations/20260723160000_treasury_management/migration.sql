@@ -1,16 +1,19 @@
 -- AlterEnum: PaymentMethod — remplacer les anciennes valeurs par les nouvelles
--- On ne peut pas ALTER un enum directement en PostgreSQL, donc on crée un nouveau type et on remplace
+-- Étape 1: créer le nouveau type
 CREATE TYPE "PaymentMethod_new" AS ENUM ('CHEQUE_NSIA', 'VIREMENT_NSIA', 'CHEQUE_BOA', 'VIREMENT_BOA', 'CHEQUE_ECOBANK', 'VIREMENT_ECOBANK', 'WAVE', 'ORANGE_MONEY', 'DJAMO', 'ESPECE');
 
--- Mettre à jour les valeurs existantes dans invoices.paymentMethod
-UPDATE "invoices" SET "paymentMethod" = 'ESPECE' WHERE "paymentMethod" = 'ESPECE';
-UPDATE "invoices" SET "paymentMethod" = 'CHEQUE_NSIA' WHERE "paymentMethod" = 'CHEQUE';
-UPDATE "invoices" SET "paymentMethod" = 'VIREMENT_NSIA' WHERE "paymentMethod" = 'VIREMENT_BANCAIRE';
-UPDATE "invoices" SET "paymentMethod" = 'WAVE' WHERE "paymentMethod" = 'MOBILE_MONEY';
-
--- Remplacer la colonne invoices.paymentMethod
+-- Étape 2: convertir la colonne en mappant les anciennes valeurs vers les nouvelles
 ALTER TABLE "invoices" ALTER COLUMN "paymentMethod" DROP DEFAULT;
-ALTER TABLE "invoices" ALTER COLUMN "paymentMethod" TYPE "PaymentMethod_new" USING "paymentMethod"::text::"PaymentMethod_new";
+ALTER TABLE "invoices" ALTER COLUMN "paymentMethod" TYPE "PaymentMethod_new" USING
+  CASE "paymentMethod"::text
+    WHEN 'CHEQUE' THEN 'CHEQUE_NSIA'::"PaymentMethod_new"
+    WHEN 'VIREMENT_BANCAIRE' THEN 'VIREMENT_NSIA'::"PaymentMethod_new"
+    WHEN 'MOBILE_MONEY' THEN 'WAVE'::"PaymentMethod_new"
+    WHEN 'ESPECE' THEN 'ESPECE'::"PaymentMethod_new"
+    ELSE 'ESPECE'::"PaymentMethod_new"
+  END;
+
+-- Étape 3: remplacer l'ancien type par le nouveau
 DROP TYPE "PaymentMethod";
 CREATE TYPE "PaymentMethod" AS ENUM ('CHEQUE_NSIA', 'VIREMENT_NSIA', 'CHEQUE_BOA', 'VIREMENT_BOA', 'CHEQUE_ECOBANK', 'VIREMENT_ECOBANK', 'WAVE', 'ORANGE_MONEY', 'DJAMO', 'ESPECE');
 ALTER TABLE "invoices" ALTER COLUMN "paymentMethod" TYPE "PaymentMethod" USING "paymentMethod"::text::"PaymentMethod";
