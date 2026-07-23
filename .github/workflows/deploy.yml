@@ -44,19 +44,24 @@ jobs:
       - name: Deploy to VPS
         env:
           HOST: ${{ secrets.SSH_HOST }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           SSH="ssh -o StrictHostKeyChecking=accept-new -o BatchMode=yes"
           # Sauvegarde de l'existant (rollback possible)
           $SSH root@"$HOST" "mkdir -p /opt/sagard/_backups && tar czf /opt/sagard/_backups/api-dist-\$(date +%Y%m%d-%H%M%S).tar.gz -C /opt/sagard/api/apps/api dist || true"
           # Envoi du build compilé
           rsync -az --delete -e "$SSH" apps/api/dist/ root@"$HOST":/opt/sagard/api/apps/api/dist/
+          # Envoi du schéma Prisma et des migrations
+          rsync -az -e "$SSH" packages/database/prisma/ root@"$HOST":/opt/sagard/api/packages/database/prisma/
+          # Créer/mettre à jour le .env pour la migration
+          $SSH root@"$HOST" "echo 'DATABASE_URL=$DATABASE_URL' > /opt/sagard/api/packages/database/.env"
 
           # --- OPTIONNEL : à activer quand le package.json backend change (nouvelles dépendances) ---
           # rsync -az -e "$SSH" package.json pnpm-lock.yaml apps/api/package.json root@"$HOST":/opt/sagard/api/
           # $SSH root@"$HOST" "cd /opt/sagard/api && pnpm install --prod --frozen-lockfile"
 
           # --- Migration Prisma : applique les nouvelles migrations à chaque déploiement ---
-          $SSH root@"$HOST" "cd /opt/sagard/api && pnpm exec prisma migrate deploy --schema=packages/database/prisma/schema.prisma"
+          $SSH root@"$HOST" "cd /opt/sagard/api && npx prisma migrate deploy --schema=packages/database/prisma/schema.prisma"
 
           # Redémarrage du service PM2
           $SSH root@"$HOST" "pm2 restart sagard-api --update-env"
