@@ -224,7 +224,7 @@ export class PointagesService {
   private computeLateMinutes(shift: string, checkInTime: Date): number {
     const actual = checkInTime.getHours() * 60 + checkInTime.getMinutes()
     const graceMinutes = 15
-    const expected = shift === 'NUIT' ? 20 * 60 : 8 * 60 // 20h ou 8h
+    const expected = shift === 'NUIT' ? 18 * 60 + 30 : 6 * 60 + 30 // 18h30 ou 6h30
     const delta = actual - (expected + graceMinutes)
     return delta > 0 ? delta : 0
   }
