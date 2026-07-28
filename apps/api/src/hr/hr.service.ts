@@ -2,14 +2,15 @@
 import * as bcrypt from 'bcryptjs'
 import { PrismaService } from '../prisma/prisma.service'
 import { NotificationsService } from '../notifications/notifications.service'
+import { TreasuryService } from '../treasury/treasury.service'
 
 @Injectable()
 export class HrService {
-  constructor(private prisma: PrismaService, private notifications: NotificationsService) {}
+  constructor(private prisma: PrismaService, private notifications: NotificationsService, private treasury: TreasuryService) {}
 
   // ── Paie (Payroll = document mensuel global + PayrollLine par agent) ──
   async getPayrolls(filters?: { month?: number; year?: number }) {
-    return this.prisma.payroll.findMany({
+    const payrolls = await this.prisma.payroll.findMany({
       where: {
         ...(filters?.month && { month: filters.month }),
         ...(filters?.year  && { year:  filters.year  }),
@@ -17,73 +18,28 @@ export class HrService {
       include: { lines: { include: { agent: { include: { user: { select: { firstName: true, lastName: true } } } } } } },
       orderBy: [{ year: 'desc' }, { month: 'desc' }],
     })
+    // Enrichir avec le compte de payés/lignes
+    return payrolls.map(p => {
+      const paidCount = p.lines.filter(l => l.paymentStatus === 'PAYE').length
+      const validatedCount = p.lines.filter(l => l.paymentStatus === 'VALIDE').length
+      const blockedCount = p.lines.filter(l => l.blocked).length
+      return { ...p, paidCount, validatedCount, blockedCount, totalLines: p.lines.length }
+    })
   }
 
-  // ── Calcul paie Sénégal / UEMOA ──
-  private computePayslip(baseSalary: number, daysWorked: number, overtimeHours: number) {
-    const dailyRate = baseSalary / 26
-    const salaireBrut = Math.round(dailyRate * daysWorked)
-
-    // Primes
-    const primeTransport = 26000       // prime transport forfaitaire
-    const primeSalissure = 5000        // prime de salissure
-    const totalPrimes = primeTransport + primeSalissure
-
-    // Heures supplémentaires (taux horaire × 1.25 pour les 8 premières, ×1.5 au-delà)
-    const hourlyRate = baseSalary / 173.33
-    const ot1 = Math.min(overtimeHours, 8) * hourlyRate * 1.25
-    const ot2 = Math.max(overtimeHours - 8, 0) * hourlyRate * 1.5
-    const totalOvertime = Math.round(ot1 + ot2)
-
-    const brut = salaireBrut + totalPrimes + totalOvertime
-
-    // Cotisations sociales salariales
-    const cnps_ipres_rg   = Math.round(brut * 0.056)  // IPRES Régime Général 5.6%
-    const cnps_ipres_rc   = Math.round(Math.min(brut, 600000) * 0.036) // IPRES RC 3.6% plafonné
-    const cotisationMaladie = Math.round(brut * 0.03)  // IPM 3%
-    const totalCotisations = cnps_ipres_rg + cnps_ipres_rc + cotisationMaladie
-
-    // IRPP/TRIMF simplifié (barème progressif simplifié Sénégal)
-    const imposable = brut - totalCotisations
-    let irpp = 0
-    if (imposable > 630000) irpp = Math.round((imposable - 630000) * 0.40 + 97500)
-    else if (imposable > 500000) irpp = Math.round((imposable - 500000) * 0.30 + 58500)
-    else if (imposable > 350000) irpp = Math.round((imposable - 350000) * 0.25 + 21000)
-    else if (imposable > 200000) irpp = Math.round((imposable - 200000) * 0.20 + 1000)
-    else if (imposable > 50000) irpp = Math.round((imposable - 50000) * 0.05)
-    const trimf = imposable <= 200000 ? 900 : imposable <= 500000 ? 3600 : 6000
-
-    const totalRetenues = totalCotisations + irpp + trimf
-    const net = brut - totalRetenues
-
-    return {
-      daysWorked, hoursWorked: (daysWorked * 8) + overtimeHours,
-      baseSalary: baseSalary,
-      grossSalary: brut, netSalary: Math.max(net, 0),
-      bonuses: totalPrimes + totalOvertime,
-      deductions: totalRetenues,
-      notes: JSON.stringify({
-        primeTransport, primeSalissure, heuresSupp: totalOvertime,
-        cnps_ipres_rg, cnps_ipres_rc, cotisationMaladie,
-        irpp, trimf, imposable,
-      }),
-    }
-  }
-
-  async generateMonthlyPayroll(month: number, year: number, agentIds?: string[]) {
+  // ── Créer un mois de paie : crée le Payroll + une ligne par agent EN_POSTE avec jours calculés depuis pointages ──
+  async createPayrollMonth(month: number, year: number) {
     const existing = await this.prisma.payroll.findUnique({ where: { month_year: { month, year } } })
-    if (existing) throw new BadRequestException('Paie déjà générée pour ce mois')
+    if (existing) throw new BadRequestException('La paie de ce mois existe déjà')
 
     const agents = await this.prisma.agent.findMany({
-      where: { status: 'EN_POSTE', ...(agentIds && agentIds.length > 0 && { id: { in: agentIds } }) },
+      where: { status: 'EN_POSTE' },
       select: { id: true, baseSalary: true },
     })
 
-    // Période du mois
     const monthStart = new Date(year, month - 1, 1)
     const monthEnd = new Date(year, month, 1)
 
-    // Pour chaque agent, compter les jours travaillés depuis les pointages
     const linesData = await Promise.all(agents.map(async a => {
       const base = Number(a.baseSalary ?? 0)
       const pointages = await this.prisma.pointage.findMany({
@@ -94,9 +50,11 @@ export class HrService {
         },
         select: { date: true },
       })
-      // Compter les jours uniques (un agent peut avoir 2 vacations/jour)
       const uniqueDays = new Set(pointages.map(p => p.date.toISOString().split('T')[0]))
       const daysWorked = uniqueDays.size
+
+      const dailyRate = base / 26
+      const salaireBrut = Math.round(dailyRate * daysWorked)
 
       return {
         agentId: a.id,
@@ -105,8 +63,9 @@ export class HrService {
         baseSalary: base,
         bonuses: 0,
         deductions: 0,
-        grossSalary: base,
-        netSalary: base,
+        grossSalary: salaireBrut,
+        netSalary: salaireBrut,
+        paymentStatus: 'BROUILLON' as any,
       }
     }))
 
@@ -122,36 +81,93 @@ export class HrService {
     })
   }
 
-  async getPayslip(payrollLineId: string) {
+  // ── Fiche de paie détaillée (avec calcul des cotisations) ──
+  async getPayslip(lineId: string) {
     const line = await this.prisma.payrollLine.findUnique({
-      where: { id: payrollLineId },
+      where: { id: lineId },
       include: {
         agent: { include: { user: { select: { firstName: true, lastName: true, email: true, phone: true } } } },
         payroll: true,
       },
     })
     if (!line) throw new NotFoundException('Fiche de paie introuvable')
+
+    const brut = Number(line.grossSalary)
+    const cnps_ipres_rg = Math.round(brut * 0.056)
+    const cnps_ipres_rc = Math.round(Math.min(brut, 600000) * 0.036)
+    const cotisationMaladie = Math.round(brut * 0.03)
+    const totalCotisations = cnps_ipres_rg + cnps_ipres_rc + cotisationMaladie
+    const imposable = brut - totalCotisations
+    let irpp = 0
+    if (imposable > 630000) irpp = Math.round((imposable - 630000) * 0.40 + 97500)
+    else if (imposable > 500000) irpp = Math.round((imposable - 500000) * 0.30 + 58500)
+    else if (imposable > 350000) irpp = Math.round((imposable - 350000) * 0.25 + 21000)
+    else if (imposable > 200000) irpp = Math.round((imposable - 200000) * 0.20 + 1000)
+    else if (imposable > 50000) irpp = Math.round((imposable - 50000) * 0.05)
+    const trimf = imposable <= 200000 ? 900 : imposable <= 500000 ? 3600 : 6000
+
     return {
       ...line,
-      details: line.notes ? JSON.parse(line.notes) : null,
+      details: { cnps_ipres_rg, cnps_ipres_rc, cotisationMaladie, irpp, trimf, imposable, primeTransport: 0, primeSalissure: 0, heuresSupp: 0 },
     }
   }
 
-  async approvePayroll(payrollId: string, approvedBy: string) {
-    return this.prisma.payroll.update({
-      where: { id: payrollId },
-      data: { status: 'VALIDE', approvedBy, processedAt: new Date() },
+  // ── Valider une ligne de paie (BROUILLON → VALIDE) ──
+  async validatePayrollLine(lineId: string) {
+    const line = await this.prisma.payrollLine.findUnique({ where: { id: lineId } })
+    if (!line) throw new NotFoundException('Ligne de paie introuvable')
+    if (line.blocked) throw new BadRequestException('Cette ligne est bloquée')
+    if (line.paymentStatus === 'PAYE') throw new BadRequestException('Cette ligne est déjà payée')
+
+    return this.prisma.payrollLine.update({
+      where: { id: lineId },
+      data: { paymentStatus: 'VALIDE' },
     })
   }
 
-  async markPayrollPaid(payrollId: string) {
-    return this.prisma.payroll.update({ where: { id: payrollId }, data: { status: 'PAYE' } })
+  // ── Payer une ligne de paie (VALIDE → PAYE) avec débit trésorerie ──
+  async payPayrollLine(lineId: string, data: { treasuryAccountId: string; paymentMethod?: string; reference?: string }) {
+    const line = await this.prisma.payrollLine.findUnique({
+      where: { id: lineId },
+      include: { agent: { include: { user: { select: { firstName: true, lastName: true } } } }, payroll: true },
+    })
+    if (!line) throw new NotFoundException('Ligne de paie introuvable')
+    if (line.blocked) throw new BadRequestException('Cette ligne est bloquée')
+    if (line.paymentStatus === 'PAYE') throw new BadRequestException('Cette ligne est déjà payée')
+    if (line.paymentStatus !== 'VALIDE') throw new BadRequestException('La ligne doit être validée avant paiement')
+
+    const amount = Number(line.netSalary)
+    if (amount <= 0) throw new BadRequestException('Le montant net est nul ou négatif')
+
+    // Débiter la trésorerie
+    await this.treasury.debit(data.treasuryAccountId, {
+      amount,
+      description: `Salaire - ${line.agent.user.firstName} ${line.agent.user.lastName} - ${String(line.payroll.month).padStart(2, '0')}/${line.payroll.year}`,
+      reference: data.reference,
+    })
+
+    return this.prisma.payrollLine.update({
+      where: { id: lineId },
+      data: {
+        paymentStatus: 'PAYE',
+        paidAt: new Date(),
+        paymentMethod: data.paymentMethod || 'VIREMENT_BANCAIRE',
+        paymentReference: data.reference,
+        treasuryAccountId: data.treasuryAccountId,
+      },
+    })
   }
 
+  // ── Supprimer un mois de paie (si aucune ligne n'est PAYE) ──
   async deletePayroll(payrollId: string) {
-    const payroll = await this.prisma.payroll.findUnique({ where: { id: payrollId } })
+    const payroll = await this.prisma.payroll.findUnique({
+      where: { id: payrollId },
+      include: { lines: { select: { paymentStatus: true } } },
+    })
     if (!payroll) throw new NotFoundException('Paie introuvable')
-    if (payroll.status === 'PAYE') throw new BadRequestException('Impossible de supprimer une paie déjà payée')
+    const hasPaid = payroll.lines.some(l => l.paymentStatus === 'PAYE')
+    if (hasPaid) throw new BadRequestException('Impossible de supprimer : certaines lignes sont déjà payées')
+
     return this.prisma.payroll.delete({ where: { id: payrollId } })
   }
 
@@ -187,13 +203,13 @@ export class HrService {
   }) {
     const line = await this.prisma.payrollLine.findUnique({ where: { id: lineId } })
     if (!line) throw new NotFoundException('Ligne de paie introuvable')
+    if (line.paymentStatus === 'PAYE') throw new BadRequestException('Cette ligne est déjà payée')
 
     const daysWorked = data.daysWorked ?? line.daysWorked
     const baseSalary = data.baseSalary ?? Number(line.baseSalary)
     const bonuses = data.bonuses ?? Number(line.bonuses)
     const deductions = data.deductions ?? Number(line.deductions)
 
-    // Recalculer brut et net
     const dailyRate = baseSalary / 26
     const salaireBrutBase = Math.round(dailyRate * daysWorked)
     const brut = salaireBrutBase + bonuses
@@ -213,9 +229,7 @@ export class HrService {
       },
     })
 
-    // Recalculer les totaux du payroll parent
     await this.recalcPayrollTotals(line.payrollId)
-
     return updated
   }
 
@@ -223,18 +237,21 @@ export class HrService {
   async toggleBlockPayrollLine(lineId: string, blocked: boolean, reason?: string) {
     const line = await this.prisma.payrollLine.findUnique({ where: { id: lineId } })
     if (!line) throw new NotFoundException('Ligne de paie introuvable')
+    if (line.paymentStatus === 'PAYE') throw new BadRequestException('Cette ligne est déjà payée')
 
-    const updated = await this.prisma.payrollLine.update({
-      where: { id: lineId },
-      data: {
-        blocked,
-        blockReason: blocked ? (reason ?? 'Bloqué') : null,
-        netSalary: blocked ? 0 : Math.max(Number(line.grossSalary) - Number(line.deductions), 0),
-      },
-    })
+    const updateData: any = { blocked }
+    if (blocked) {
+      updateData.blockReason = reason ?? 'Bloqué'
+      updateData.paymentStatus = 'BLOQUE'
+      updateData.netSalary = 0
+    } else {
+      updateData.blockReason = null
+      updateData.paymentStatus = 'BROUILLON'
+      updateData.netSalary = Math.max(Number(line.grossSalary) - Number(line.deductions), 0)
+    }
 
+    const updated = await this.prisma.payrollLine.update({ where: { id: lineId }, data: updateData })
     await this.recalcPayrollTotals(line.payrollId)
-
     return updated
   }
 

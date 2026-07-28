@@ -19,23 +19,25 @@ export class HrController {
     return this.hrService.getPayrolls({ month: month ? +month : undefined, year: year ? +year : undefined })
   }
 
-  @Post('payrolls/generate')
-  @ApiOperation({ summary: 'Générer la paie mensuelle (optionnel: agentIds pour sélection)' })
-  generatePayroll(@Body() body: { month: number; year: number; agentIds?: string[] }) {
-    return this.hrService.generateMonthlyPayroll(body.month, body.year, body.agentIds)
+  @Post('payrolls/create-month')
+  @ApiOperation({ summary: 'Créer un mois de paie avec calcul auto depuis les pointages' })
+  createPayrollMonth(@Body() body: { month: number; year: number }) {
+    return this.hrService.createPayrollMonth(body.month, body.year)
   }
 
   @Get('payslip/:id')
   @ApiOperation({ summary: 'Fiche de paie individuelle détaillée' })
   getPayslip(@Param('id') id: string) { return this.hrService.getPayslip(id) }
 
-  @Patch('payrolls/:id/approve')
-  approvePayroll(@Param('id') id: string, @Request() req: any) {
-    return this.hrService.approvePayroll(id, req.user.id)
-  }
+  @Patch('payroll-lines/:id/validate')
+  @ApiOperation({ summary: 'Valider une ligne de paie (BROUILLON → VALIDE)' })
+  validateLine(@Param('id') id: string) { return this.hrService.validatePayrollLine(id) }
 
-  @Patch('payrolls/:id/pay')
-  markPaid(@Param('id') id: string) { return this.hrService.markPayrollPaid(id) }
+  @Patch('payroll-lines/:id/pay')
+  @ApiOperation({ summary: 'Payer une ligne de paie avec débit trésorerie' })
+  payLine(@Param('id') id: string, @Body() body: { treasuryAccountId: string; paymentMethod?: string; reference?: string }) {
+    return this.hrService.payPayrollLine(id, body)
+  }
 
   @Post('payrolls/:id/delete')
   @ApiOperation({ summary: 'Supprimer une fiche de paie (non payée)' })

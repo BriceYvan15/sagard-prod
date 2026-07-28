@@ -541,6 +541,13 @@ enum PayrollStatus {
   PAYE
 }
 
+enum PaymentStatus {
+  BROUILLON
+  VALIDE
+  PAYE
+  BLOQUE
+}
+
 // ══════════════════════════════════════════════════════════
 //  USERS & AUTH
 // ══════════════════════════════════════════════════════════
@@ -1372,23 +1379,26 @@ model Payroll {
 }
 
 model PayrollLine {
-  id             String   @id @default(uuid())
-  payrollId      String
-  payroll        Payroll  @relation(fields: [payrollId], references: [id], onDelete: Cascade)
-  agentId        String
-  agent          Agent    @relation(fields: [agentId], references: [id])
-  daysWorked     Int      @default(0)
-  hoursWorked    Float    @default(0)
-  baseSalary     Decimal  @db.Decimal(15, 2)
-  bonuses        Decimal  @db.Decimal(15, 2) @default(0)
-  deductions     Decimal  @db.Decimal(15, 2) @default(0)
-  grossSalary    Decimal  @db.Decimal(15, 2)
-  netSalary      Decimal  @db.Decimal(15, 2)
-  paidAt         DateTime?
-  paymentMethod  String?
-  notes          String?
-  blocked        Boolean  @default(false)
-  blockReason    String?
+  id               String   @id @default(uuid())
+  payrollId        String
+  payroll          Payroll  @relation(fields: [payrollId], references: [id], onDelete: Cascade)
+  agentId          String
+  agent            Agent    @relation(fields: [agentId], references: [id])
+  daysWorked       Int      @default(0)
+  hoursWorked      Float    @default(0)
+  baseSalary       Decimal  @db.Decimal(15, 2)
+  bonuses          Decimal  @db.Decimal(15, 2) @default(0)
+  deductions       Decimal  @db.Decimal(15, 2) @default(0)
+  grossSalary      Decimal  @db.Decimal(15, 2)
+  netSalary        Decimal  @db.Decimal(15, 2)
+  paymentStatus    PaymentStatus @default(BROUILLON)
+  paidAt           DateTime?
+  paymentMethod    String?
+  paymentReference String?
+  treasuryAccountId String?
+  notes            String?
+  blocked          Boolean  @default(false)
+  blockReason      String?
 
   @@map("payroll_lines")
 }
