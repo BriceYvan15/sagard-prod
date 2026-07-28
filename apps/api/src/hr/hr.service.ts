@@ -27,7 +27,10 @@ export class HrService {
     })
   }
 
-  // ── Créer un mois de paie : crée le Payroll + une ligne par agent EN_POSTE avec jours calculés depuis pointages ──
+  // Taux fixe par vacation de 12h (JOUR ou NUIT)
+  private static readonly VACATION_RATE = 2500
+
+  // ── Créer un mois de paie : crée le Payroll + une ligne par agent EN_POSTE avec vacations calculées depuis pointages ──
   async createPayrollMonth(month: number, year: number) {
     const existing = await this.prisma.payroll.findUnique({ where: { month_year: { month, year } } })
     if (existing) throw new BadRequestException('La paie de ce mois existe déjà')
@@ -42,24 +45,24 @@ export class HrService {
 
     const linesData = await Promise.all(agents.map(async a => {
       const base = Number(a.baseSalary ?? 0)
+      // Chaque pointage TERMINÉ = 1 vacation de 12h (JOUR ou NUIT)
+      // Un agent qui fait JOUR + NUIT le même jour = 2 vacations = 24h = 5000 FCFA
       const pointages = await this.prisma.pointage.findMany({
         where: {
           agentId: a.id,
           date: { gte: monthStart, lt: monthEnd },
-          status: { in: ['TERMINE', 'EN_COURS', 'PRESENT', 'RETARD', 'JUSTIFIE'] },
+          status: 'TERMINE',
         },
-        select: { date: true },
+        select: { hoursWorked: true },
       })
-      const uniqueDays = new Set(pointages.map(p => p.date.toISOString().split('T')[0]))
-      const daysWorked = uniqueDays.size
-
-      const dailyRate = base / 26
-      const salaireBrut = Math.round(dailyRate * daysWorked)
+      const daysWorked = pointages.length
+      const hoursWorked = pointages.reduce((sum, p) => sum + (p.hoursWorked ?? 0), 0)
+      const salaireBrut = daysWorked * HrService.VACATION_RATE
 
       return {
         agentId: a.id,
         daysWorked,
-        hoursWorked: daysWorked * 8,
+        hoursWorked: Math.round(hoursWorked * 100) / 100,
         baseSalary: base,
         bonuses: 0,
         deductions: 0,
