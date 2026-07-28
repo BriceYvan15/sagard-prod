@@ -17,43 +17,44 @@ jobs:
           HOST: ${{ secrets.SSH_HOST }}
         run: |
           SSH="ssh -o StrictHostKeyChecking=accept-new -o BatchMode=yes"
-          $SSH root@"$HOST" "cd /opt/sagard/api && node -e '
-            const { PrismaClient } = require(\"@prisma/client\");
+          $SSH root@"$HOST" 'cd /opt/sagard/api && cat > /tmp/query-agent.js << '"'"'ENDSCRIPT'"'"'
+            const { PrismaClient } = require("@prisma/client");
             const p = new PrismaClient();
             (async () => {
               const agents = await p.agent.findMany({
                 where: {
                   OR: [
-                    { user: { firstName: { contains: \"kouassi\", mode: \"insensitive\" } } },
-                    { user: { lastName: { contains: \"konan\", mode: \"insensitive\" } } },
-                    { user: { firstName: { contains: \"konan\", mode: \"insensitive\" } } },
-                    { user: { lastName: { contains: \"kouassi\", mode: \"insensitive\" } } },
+                    { user: { firstName: { contains: "kouassi", mode: "insensitive" } } },
+                    { user: { lastName: { contains: "konan", mode: "insensitive" } } },
+                    { user: { firstName: { contains: "konan", mode: "insensitive" } } },
+                    { user: { lastName: { contains: "kouassi", mode: "insensitive" } } },
                   ],
                 },
                 include: { user: { select: { firstName: true, lastName: true } } },
               });
-              if (agents.length === 0) { console.log(\"Aucun agent trouve\"); await p.$disconnect(); return; }
+              if (agents.length === 0) { console.log("Aucun agent trouve"); await p.$disconnect(); return; }
               for (const a of agents) {
                 const pointages = await p.pointage.findMany({
-                  where: { agentId: a.id, status: \"TERMINE\" },
-                  orderBy: { date: \"desc\" },
+                  where: { agentId: a.id, status: "TERMINE" },
+                  orderBy: { date: "desc" },
                 });
                 const totalHours = pointages.reduce((s, pt) => s + (pt.hoursWorked || 0), 0);
-                console.log(\"Agent: \" + a.user.firstName + \" \" + a.user.lastName + \" (\" + a.matricule + \")\");
-                console.log(\"  Pointages TERMINES: \" + pointages.length);
-                console.log(\"  Heures totales: \" + totalHours.toFixed(2) + \"h\");
+                console.log("Agent: " + a.user.firstName + " " + a.user.lastName + " (" + a.matricule + ")");
+                console.log("  Pointages TERMINES: " + pointages.length);
+                console.log("  Heures totales: " + totalHours.toFixed(2) + "h");
                 const byMonth = {};
                 for (const pt of pointages) {
                   const d = new Date(pt.date);
-                  const key = d.getFullYear() + \"-\" + String(d.getMonth()+1).padStart(2,\"0\");
+                  const key = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0");
                   if (!byMonth[key]) byMonth[key] = { count: 0, hours: 0 };
                   byMonth[key].count++;
                   byMonth[key].hours += pt.hoursWorked || 0;
                 }
                 for (const [month, data] of Object.entries(byMonth).sort().reverse()) {
-                  console.log(\"    \" + month + \": \" + data.count + \" vacations, \" + data.hours.toFixed(2) + \"h, \" + (data.count * 2500) + \" FCFA\");
+                  console.log("    " + month + ": " + data.count + " vacations, " + data.hours.toFixed(2) + "h, " + (data.count * 2500) + " FCFA");
                 }
               }
               await p.$disconnect();
             })().catch(e => { console.error(e); process.exit(1); });
-          '"
+          ENDSCRIPT
+          node /tmp/query-agent.js'
