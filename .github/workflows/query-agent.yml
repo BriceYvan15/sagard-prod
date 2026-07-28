@@ -12,20 +12,48 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
 
-      - name: Query agent hours on prod DB
+      - name: Query agent hours on prod DB via Node.js
         env:
           HOST: ${{ secrets.SSH_HOST }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           SSH="ssh -o StrictHostKeyChecking=accept-new -o BatchMode=yes"
-          $SSH root@"$HOST" "PGPASSWORD=\$(echo $DATABASE_URL | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p') psql -h 127.0.0.1 -U sagard -d sagard_db -t -c \"
-            SELECT a.id, u.\\\"firstName\\\", u.\\\"lastName\\\", a.matricule,
-                   COUNT(p.id) AS vacations,
-                   COALESCE(SUM(p.\\\"hoursWorked\\\"), 0) AS total_hours
-            FROM agents a
-            JOIN users u ON u.id = a.\\\"userId\\\"
-            LEFT JOIN pointages p ON p.\\\"agentId\\\" = a.id AND p.status = 'TERMINE'
-            WHERE LOWER(u.\\\"firstName\\\") LIKE '%kouassi%' OR LOWER(u.\\\"lastName\\\") LIKE '%konan%'
-               OR LOWER(u.\\\"firstName\\\") LIKE '%konan%' OR LOWER(u.\\\"lastName\\\") LIKE '%kouassi%'
-            GROUP BY a.id, u.\\\"firstName\\\", u.\\\"lastName\\\", a.matricule;
-          \""
+          $SSH root@"$HOST" "cd /opt/sagard/api && node -e '
+            const { PrismaClient } = require(\"@prisma/client\");
+            const p = new PrismaClient();
+            (async () => {
+              const agents = await p.agent.findMany({
+                where: {
+                  OR: [
+                    { user: { firstName: { contains: \"kouassi\", mode: \"insensitive\" } } },
+                    { user: { lastName: { contains: \"konan\", mode: \"insensitive\" } } },
+                    { user: { firstName: { contains: \"konan\", mode: \"insensitive\" } } },
+                    { user: { lastName: { contains: \"kouassi\", mode: \"insensitive\" } } },
+                  ],
+                },
+                include: { user: { select: { firstName: true, lastName: true } } },
+              });
+              if (agents.length === 0) { console.log(\"Aucun agent trouve\"); await p.$disconnect(); return; }
+              for (const a of agents) {
+                const pointages = await p.pointage.findMany({
+                  where: { agentId: a.id, status: \"TERMINE\" },
+                  orderBy: { date: \"desc\" },
+                });
+                const totalHours = pointages.reduce((s, pt) => s + (pt.hoursWorked || 0), 0);
+                console.log(\"Agent: \" + a.user.firstName + \" \" + a.user.lastName + \" (\" + a.matricule + \")\");
+                console.log(\"  Pointages TERMINES: \" + pointages.length);
+                console.log(\"  Heures totales: \" + totalHours.toFixed(2) + \"h\");
+                const byMonth = {};
+                for (const pt of pointages) {
+                  const d = new Date(pt.date);
+                  const key = d.getFullYear() + \"-\" + String(d.getMonth()+1).padStart(2,\"0\");
+                  if (!byMonth[key]) byMonth[key] = { count: 0, hours: 0 };
+                  byMonth[key].count++;
+                  byMonth[key].hours += pt.hoursWorked || 0;
+                }
+                for (const [month, data] of Object.entries(byMonth).sort().reverse()) {
+                  console.log(\"    \" + month + \": \" + data.count + \" vacations, \" + data.hours.toFixed(2) + \"h, \" + (data.count * 2500) + \" FCFA\");
+                }
+              }
+              await p.$disconnect();
+            })().catch(e => { console.error(e); process.exit(1); });
+          '"
