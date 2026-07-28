@@ -1,0 +1,31 @@
+name: Query Agent Hours
+
+on:
+  workflow_dispatch:
+
+jobs:
+  query:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Load SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+
+      - name: Query agent hours on prod DB
+        env:
+          HOST: ${{ secrets.SSH_HOST }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          SSH="ssh -o StrictHostKeyChecking=accept-new -o BatchMode=yes"
+          $SSH root@"$HOST" "PGPASSWORD=\$(echo $DATABASE_URL | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p') psql -h 127.0.0.1 -U sagard -d sagard_db -t -c \"
+            SELECT a.id, u.\\\"firstName\\\", u.\\\"lastName\\\", a.matricule,
+                   COUNT(p.id) AS vacations,
+                   COALESCE(SUM(p.\\\"hoursWorked\\\"), 0) AS total_hours
+            FROM agents a
+            JOIN users u ON u.id = a.\\\"userId\\\"
+            LEFT JOIN pointages p ON p.\\\"agentId\\\" = a.id AND p.status = 'TERMINE'
+            WHERE LOWER(u.\\\"firstName\\\") LIKE '%kouassi%' OR LOWER(u.\\\"lastName\\\") LIKE '%konan%'
+               OR LOWER(u.\\\"firstName\\\") LIKE '%konan%' OR LOWER(u.\\\"lastName\\\") LIKE '%kouassi%'
+            GROUP BY a.id, u.\\\"firstName\\\", u.\\\"lastName\\\", a.matricule;
+          \""
