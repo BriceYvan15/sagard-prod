@@ -87,8 +87,14 @@ export class PointagesService {
     // photoUrl is now optional - GPS-only checkout supported
 
     const now = new Date()
+    // Si l'agent est en pause au moment du checkout, on termine la pause d'abord
+    let totalBreakMinutes = pointage.breakMinutes || 0
+    if (pointage.onBreak && pointage.breakStart) {
+      const ongoingBreak = (now.getTime() - new Date(pointage.breakStart).getTime()) / 60000
+      totalBreakMinutes += Math.round(ongoingBreak)
+    }
     const hoursWorked = pointage.checkInTime
-      ? Math.round(((now.getTime() - new Date(pointage.checkInTime).getTime()) / 3600000) * 100) / 100
+      ? Math.round(((now.getTime() - new Date(pointage.checkInTime).getTime() - totalBreakMinutes * 60000) / 3600000) * 100) / 100
       : 0
     // Heures normales d'une vacation : 12h. Au-delà = heures supp.
     const overtime = Math.max(0, hoursWorked - 12)
@@ -102,6 +108,8 @@ export class PointagesService {
         checkOutLng: dto.longitude,
         hoursWorked,
         overtimeHours: Math.round(overtime * 100) / 100,
+        breakMinutes: totalBreakMinutes,
+        onBreak: false,
         status: 'TERMINE',
       },
     })
@@ -159,7 +167,7 @@ export class PointagesService {
     return { created, target }
   }
 
-  async getTodayPointages(filters?: { siteId?: string; shift?: string }) {
+  async getTodayPointages(filters?: { siteId?: string; shift?: string; agentId?: string }) {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
 
@@ -168,6 +176,7 @@ export class PointagesService {
         date: today,
         ...(filters?.siteId && { siteId: filters.siteId }),
         ...(filters?.shift && { shift: filters.shift as any }),
+        ...(filters?.agentId && { agentId: filters.agentId }),
       },
       include: {
         agent: {
@@ -218,6 +227,46 @@ export class PointagesService {
     }
 
     return { date, stats, pointages }
+  }
+
+  /** Prise de pause */
+  async startBreak(agentId: string, pointageId: string) {
+    const pointage = await this.prisma.pointage.findUnique({ where: { id: pointageId } })
+    if (!pointage) throw new BadRequestException('Pointage introuvable')
+    if (pointage.agentId !== agentId) throw new ForbiddenException()
+    if (pointage.status === 'TERMINE') throw new BadRequestException('Pointage déjà terminé')
+    if (pointage.onBreak) throw new BadRequestException('Pause déjà en cours')
+
+    return this.prisma.pointage.update({
+      where: { id: pointageId },
+      data: {
+        onBreak: true,
+        breakStart: new Date(),
+      },
+    })
+  }
+
+  /** Fin de pause */
+  async endBreak(agentId: string, pointageId: string) {
+    const pointage = await this.prisma.pointage.findUnique({ where: { id: pointageId } })
+    if (!pointage) throw new BadRequestException('Pointage introuvable')
+    if (pointage.agentId !== agentId) throw new ForbiddenException()
+    if (!pointage.onBreak) throw new BadRequestException('Aucune pause en cours')
+
+    const now = new Date()
+    const breakDuration = pointage.breakStart
+      ? Math.round((now.getTime() - new Date(pointage.breakStart).getTime()) / 60000)
+      : 0
+    const totalBreak = (pointage.breakMinutes || 0) + breakDuration
+
+    return this.prisma.pointage.update({
+      where: { id: pointageId },
+      data: {
+        onBreak: false,
+        breakEnd: now,
+        breakMinutes: totalBreak,
+      },
+    })
   }
 
   /** Renvoie les minutes de retard (au-delà de 15min de tolérance), 0 si à l'heure. */

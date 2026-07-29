@@ -13,10 +13,13 @@ export class PointagesController {
   @Get('today')
   @ApiOperation({ summary: 'Pointages du jour' })
   getToday(
+    @Request() req: any,
     @Query('siteId') siteId?: string,
     @Query('shift') shift?: string,
+    @Query('agentId') agentId?: string,
   ) {
-    return this.pointagesService.getTodayPointages({ siteId, shift })
+    const userAgentId = req.user.agentId ?? req.user.sub
+    return this.pointagesService.getTodayPointages({ siteId, shift, agentId: agentId ?? userAgentId })
   }
 
   @Get('report')
@@ -54,6 +57,18 @@ export class PointagesController {
   @ApiOperation({ summary: 'Mise à jour position GPS (tracking horaire)' })
   updatePosition(@Param('id') id: string, @Request() req: any, @Body() body: { latitude?: number; longitude?: number }) {
     return this.pointagesService.updatePosition(req.user.agentId ?? req.user.sub, id, body)
+  }
+
+  @Post(':id/break-start')
+  @ApiOperation({ summary: 'Prise de pause' })
+  startBreak(@Param('id') id: string, @Request() req: any) {
+    return this.pointagesService.startBreak(req.user.agentId ?? req.user.sub, id)
+  }
+
+  @Post(':id/break-end')
+  @ApiOperation({ summary: 'Fin de pause' })
+  endBreak(@Param('id') id: string, @Request() req: any) {
+    return this.pointagesService.endBreak(req.user.agentId ?? req.user.sub, id)
   }
 
   @Post('generate-daily')
