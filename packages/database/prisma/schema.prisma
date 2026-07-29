@@ -1072,6 +1072,10 @@ model Pointage {
   shift           ShiftType
   pointingMethod  PointingMethod  @default(CONTROLEUR)
   status          PointageStatus  @default(EN_COURS)
+  breakStart      DateTime?
+  breakEnd        DateTime?
+  breakMinutes    Int             @default(0)
+  onBreak         Boolean         @default(false)
   notes           String?
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
