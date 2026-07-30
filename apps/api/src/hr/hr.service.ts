@@ -115,6 +115,96 @@ export class HrService {
     }
   }
 
+  // ── Statistiques de travail d'un agent (heures réelles vs attendues) ──
+  async getWorkStats(agentId: string, month?: number, year?: number) {
+    const now = new Date()
+    const m = month ?? now.getMonth() + 1
+    const y = year ?? now.getFullYear()
+
+    const agent = await this.prisma.agent.findUnique({
+      where: { id: agentId },
+      select: { id: true, shift: true, baseSalary: true, status: true },
+    })
+    if (!agent) throw new NotFoundException('Agent introuvable')
+
+    // Heures attendues par jour selon le shift
+    // JOUR / NUIT = 12h, MIXTE = 24h
+    const hoursPerDay = agent.shift === 'MIXTE' ? 24 : 12
+
+    const monthStart = new Date(y, m - 1, 1)
+    const monthEnd = new Date(y, m, 1)
+    const daysInMonth = new Date(y, m, 0).getDate()
+
+    // Jours attendus : tous les jours du mois (un agent travaille son shift chaque jour)
+    // En réalité, avec 12h/12h, un agent travaille tous les jours.
+    // Avec 24h/24h (MIXTE), il travaille un jour sur deux.
+    const expectedDays = agent.shift === 'MIXTE' ? Math.ceil(daysInMonth / 2) : daysInMonth
+    const expectedHours = expectedDays * hoursPerDay
+
+    // Pointages du mois (tous, pas seulement terminés)
+    const pointages = await this.prisma.pointage.findMany({
+      where: {
+        agentId,
+        date: { gte: monthStart, lt: monthEnd },
+      },
+      select: {
+        id: true,
+        date: true,
+        shift: true,
+        checkInTime: true,
+        checkOutTime: true,
+        hoursWorked: true,
+        overtimeHours: true,
+        lateMinutes: true,
+        status: true,
+      },
+      orderBy: { date: 'desc' },
+    })
+
+    const completed = pointages.filter(p => p.status === 'TERMINE')
+    const inProgress = pointages.filter(p => p.status === 'EN_COURS')
+    const absent = pointages.filter(p => p.status === 'ABSENT')
+
+    const daysWorked = completed.length
+    const totalHours = completed.reduce((sum, p) => sum + (p.hoursWorked ?? 0), 0)
+    const totalMinutes = Math.round(totalHours * 60)
+    const overtimeHours = completed.reduce((sum, p) => sum + (p.overtimeHours ?? 0), 0)
+    const lateCount = completed.filter(p => (p.lateMinutes ?? 0) > 0).length
+    const totalLateMinutes = completed.reduce((sum, p) => sum + (p.lateMinutes ?? 0), 0)
+
+    // Estimation gains : daysWorked * VACATION_RATE
+    const estimatedEarnings = daysWorked * HrService.VACATION_RATE
+
+    // Taux de présence
+    const attendanceRate = expectedDays > 0 ? Math.round((daysWorked / expectedDays) * 100) : 0
+
+    // Taux de remplissage (heures réelles / heures attendues)
+    const fillRate = expectedHours > 0 ? Math.round((totalHours / expectedHours) * 100) : 0
+
+    return {
+      agentId,
+      month: m,
+      year: y,
+      shift: agent.shift,
+      hoursPerDay,
+      daysInMonth,
+      expectedDays,
+      expectedHours,
+      daysWorked,
+      hoursWorked: Math.round(totalHours * 100) / 100,
+      minutesWorked: totalMinutes,
+      overtimeHours: Math.round(overtimeHours * 100) / 100,
+      lateCount,
+      totalLateMinutes,
+      inProgressCount: inProgress.length,
+      absentCount: absent.length,
+      estimatedEarnings,
+      attendanceRate,
+      fillRate,
+      recentPointages: pointages.slice(0, 10),
+    }
+  }
+
   // ── Valider une ligne de paie (BROUILLON → VALIDE) ──
   async validatePayrollLine(lineId: string) {
     const line = await this.prisma.payrollLine.findUnique({ where: { id: lineId } })
