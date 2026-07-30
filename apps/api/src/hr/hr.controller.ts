@@ -29,6 +29,16 @@ export class HrController {
   @ApiOperation({ summary: 'Fiche de paie individuelle détaillée' })
   getPayslip(@Param('id') id: string) { return this.hrService.getPayslip(id) }
 
+  @Get('agents/:agentId/work-stats')
+  @ApiOperation({ summary: 'Statistiques de travail d\'un agent (heures réelles vs attendues)' })
+  getWorkStats(
+    @Param('agentId') agentId: string,
+    @Query('month') month?: string,
+    @Query('year') year?: string,
+  ) {
+    return this.hrService.getWorkStats(agentId, month ? +month : undefined, year ? +year : undefined)
+  }
+
   @Patch('payroll-lines/:id/validate')
   @ApiOperation({ summary: 'Valider une ligne de paie (BROUILLON → VALIDE)' })
   validateLine(@Param('id') id: string) { return this.hrService.validatePayrollLine(id) }
