@@ -31,6 +31,16 @@ export class PointagesController {
     return this.pointagesService.getDailyReport(new Date(date), siteId)
   }
 
+  @Get('by-date')
+  @ApiOperation({ summary: 'Pointages d\'une date spécifique' })
+  getByDate(
+    @Query('date') date: string,
+    @Query('siteId') siteId?: string,
+    @Query('shift') shift?: string,
+  ) {
+    return this.pointagesService.getPointagesByDate(new Date(date), { siteId, shift })
+  }
+
   @Get('agent/:agentId')
   @ApiOperation({ summary: 'Pointages d\'un agent' })
   getAgentPointages(
