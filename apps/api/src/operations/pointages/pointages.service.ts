@@ -270,4 +270,12 @@ export class PointagesService {
     const delta = actual - (expected + graceMinutes)
     return delta > 0 ? delta : 0
   }
+
+  /** Supprime un pointage (réservé au DG) */
+  async deletePointage(pointageId: string) {
+    const pointage = await this.prisma.pointage.findUnique({ where: { id: pointageId } })
+    if (!pointage) throw new BadRequestException('Pointage introuvable')
+    await this.prisma.pointage.delete({ where: { id: pointageId } })
+    return { id: pointageId, deleted: true }
+  }
 }

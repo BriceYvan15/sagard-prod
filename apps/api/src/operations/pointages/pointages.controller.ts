@@ -1,6 +1,9 @@
-﻿import { Controller, Get, Post, Patch, Param, Body, Query, UseGuards, Request } from '@nestjs/common'
+﻿import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards, Request } from '@nestjs/common'
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger'
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard'
+import { RolesGuard } from '../../auth/guards/roles.guard'
+import { Roles } from '../../auth/decorators/roles.decorator'
+import { Role } from '@prisma/client'
 import { PointagesService } from './pointages.service'
 
 @ApiTags('Pointages')
@@ -81,5 +84,13 @@ export class PointagesController {
   @ApiOperation({ summary: 'Générer les pointages du jour à partir des déploiements actifs (cron)' })
   generateDaily(@Body() body: { date?: string }) {
     return this.pointagesService.generateDailyAttendance(body?.date ? new Date(body.date) : undefined)
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Supprimer un pointage (DG uniquement)' })
+  @UseGuards(RolesGuard)
+  @Roles(Role.DIRECTEUR_GENERAL)
+  deletePointage(@Param('id') id: string) {
+    return this.pointagesService.deletePointage(id)
   }
 }
