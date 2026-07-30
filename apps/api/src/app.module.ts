@@ -36,6 +36,8 @@ import { TreasuryModule } from './treasury/treasury.module'
 import { AuditModule } from './audit/audit.module'
 import { SettingsModule } from './settings/settings.module'
 import { MailModule } from './mail/mail.module'
+import { ClientModule } from './client/client.module'
+import { InterventionsModule } from './interventions/interventions.module'
 
 @Module({
   imports: [
@@ -88,6 +90,8 @@ import { MailModule } from './mail/mail.module'
     AuditModule,
     SettingsModule,
     MailModule,
+    ClientModule,
+    InterventionsModule,
   ],
 })
 export class AppModule {}
