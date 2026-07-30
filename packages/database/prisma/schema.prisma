@@ -22,6 +22,7 @@ enum Role {
   AGENT_ACCUEIL
   AGENT_TERRAIN
   CLIENT
+  TECHNICIEN
 }
 
 enum UserStatus {
@@ -577,6 +578,8 @@ model User {
   incidentOpsReports       Incident[] @relation("IncidentOpsReportBy")
   incidentOpsValidations   Incident[] @relation("IncidentOpsReportValidatedBy")
   terminatedAgents         Agent[]    @relation("AgentTerminatedBy")
+  clientAccount            Client?
+  interventions            Intervention[] @relation("InterventionTechnician")
 
   @@map("users")
 }
@@ -639,9 +642,12 @@ model Client {
   contracts     ClientContract[]
   sites         Site[]
   invoices      Invoice[]
+  interventions Intervention[]
   complaints    Complaint[]
   history       ClientHistory[]
   leads         CrmLead[]
+  userId        String?  @unique
+  user          User?    @relation(fields: [userId], references: [id])
 
   @@map("clients")
 }
@@ -778,6 +784,7 @@ model Site {
   blacklists        BlacklistSite[]
   transfersFrom     AgentTransfer[]  @relation("TransferFromSite")
   transfersTo       AgentTransfer[]  @relation("TransferToSite")
+  interventions     Intervention[]   @relation("InterventionSite")
 
   @@map("sites")
 }
@@ -1981,4 +1988,55 @@ model ExtraService {
 
   @@index([agentId, date])
   @@map("extra_services")
+}
+
+// ===============================================================
+//  INTERVENTIONS TECHNIQUES (cameras, videosurveillance)
+// ===============================================================
+
+enum InterventionType {
+  INSTALLATION_CAMERA
+  INSTALLATION_VIDEOSURVEILLANCE
+  MAINTENANCE_CAMERA
+  MAINTENANCE_VIDEOSURVEILLANCE
+  REPARATION
+  AUDIT_TECHNIQUE
+  AUTRE
+}
+
+enum InterventionStatus {
+  PLANIFIEE
+  ASSIGNEE
+  EN_COURS
+  TERMINEE
+  ANNULEE
+  REPORTER
+}
+
+model Intervention {
+  id              String             @id @default(uuid())
+  reference       String             @unique
+  type            InterventionType
+  title           String
+  description     String?
+  clientId        String?
+  client          Client?            @relation(fields: [clientId], references: [id])
+  siteId          String?
+  site            Site?              @relation("InterventionSite", fields: [siteId], references: [id])
+  technicianId    String?
+  technician      User?              @relation("InterventionTechnician", fields: [technicianId], references: [id])
+  scheduledDate   DateTime
+  completedAt     DateTime?
+  status          InterventionStatus @default(PLANIFIEE)
+  priority        String             @default("NORMALE")
+  equipmentList   String?
+  notes           String?
+  beforePhotos    String[]
+  afterPhotos     String[]
+  report          String?
+  createdById     String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@map("interventions")
 }
