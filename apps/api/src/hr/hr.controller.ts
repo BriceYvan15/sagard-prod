@@ -139,4 +139,32 @@ export class HrController {
   @Get('alerts/indisciplined')
   @ApiOperation({ summary: 'Agents indisciplinés (3+ fautes)' })
   getIndisciplinedAgents() { return this.hrService.getIndisciplinedAgents() }
+
+  // ── Services Extra (assignés par le chef des opérations) ──
+  @Post('agents/:agentId/extra-services')
+  @ApiOperation({ summary: 'Assigner un service extra à un agent (chef des opérations)' })
+  assignExtraService(
+    @Param('agentId') agentId: string,
+    @Body() body: { date: string; hours?: number; amount?: number; description?: string; assignedById?: string; assignedByName?: string },
+  ) {
+    return this.hrService.assignExtraService(agentId, body)
+  }
+
+  @Get('agents/:agentId/extra-services')
+  @ApiOperation({ summary: 'Liste des services extra d\'un agent' })
+  getExtraServices(@Param('agentId') agentId: string, @Query('month') month?: string, @Query('year') year?: string) {
+    return this.hrService.getExtraServices(agentId, month ? +month : undefined, year ? +year : undefined)
+  }
+
+  @Patch('extra-services/:id/validate')
+  @ApiOperation({ summary: 'Valider un service extra' })
+  validateExtraService(@Param('id') id: string) {
+    return this.hrService.validateExtraService(id)
+  }
+
+  @Patch('extra-services/:id/cancel')
+  @ApiOperation({ summary: 'Annuler un service extra' })
+  cancelExtraService(@Param('id') id: string) {
+    return this.hrService.cancelExtraService(id)
+  }
 }

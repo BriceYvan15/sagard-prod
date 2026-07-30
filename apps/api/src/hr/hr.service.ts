@@ -115,7 +115,13 @@ export class HrService {
     }
   }
 
-  // ── Statistiques de travail d'un agent (heures réelles vs attendues) ──
+  // ── Statistiques de travail d'un agent (heures réelles vs attendues + financier) ──
+  // Règles métier :
+  //   - 1 vacation = 12h (JOUR/NUIT) ou 24h (MIXTE) = 2500 FCFA
+  //   - Retard : 200 FCFA de pénalité par heure de retard
+  //   - Heures manquées : déduction proportionnelle (1 jour non travaillé = -2500 F)
+  //   - Rattrapage : possible pour les heures manquées (à valider par le chef)
+  //   - Services extra : assignés par le chef des opérations, rémunérés à 2500 F/vacation
   async getWorkStats(agentId: string, month?: number, year?: number) {
     const now = new Date()
     const m = month ?? now.getMonth() + 1
@@ -127,39 +133,28 @@ export class HrService {
     })
     if (!agent) throw new NotFoundException('Agent introuvable')
 
-    // Heures attendues par jour selon le shift
-    // JOUR / NUIT = 12h, MIXTE = 24h
     const hoursPerDay = agent.shift === 'MIXTE' ? 24 : 12
+    const vacationRate = HrService.VACATION_RATE
+    const latePenaltyPerHour = 200
 
     const monthStart = new Date(y, m - 1, 1)
     const monthEnd = new Date(y, m, 1)
     const daysInMonth = new Date(y, m, 0).getDate()
 
-    // Jours attendus : tous les jours du mois (un agent travaille son shift chaque jour)
-    // En réalité, avec 12h/12h, un agent travaille tous les jours.
-    // Avec 24h/24h (MIXTE), il travaille un jour sur deux.
     const expectedDays = agent.shift === 'MIXTE' ? Math.ceil(daysInMonth / 2) : daysInMonth
     const expectedHours = expectedDays * hoursPerDay
 
-    // Pointages du mois (tous, pas seulement terminés)
     const pointages = await this.prisma.pointage.findMany({
-      where: {
-        agentId,
-        date: { gte: monthStart, lt: monthEnd },
-      },
-      select: {
-        id: true,
-        date: true,
-        shift: true,
-        checkInTime: true,
-        checkOutTime: true,
-        hoursWorked: true,
-        overtimeHours: true,
-        lateMinutes: true,
-        status: true,
-      },
+      where: { agentId, date: { gte: monthStart, lt: monthEnd } },
+      select: { id: true, date: true, shift: true, checkInTime: true, checkOutTime: true, hoursWorked: true, overtimeHours: true, lateMinutes: true, status: true },
       orderBy: { date: 'desc' },
     })
+
+    // Services extra du mois
+    const extraServices = await this.prisma.extraService.findMany({
+      where: { agentId, date: { gte: monthStart, lt: monthEnd } },
+      orderBy: { date: 'desc' },
+    }).catch(() => [])
 
     const completed = pointages.filter(p => p.status === 'TERMINE')
     const inProgress = pointages.filter(p => p.status === 'EN_COURS')
@@ -171,14 +166,29 @@ export class HrService {
     const overtimeHours = completed.reduce((sum, p) => sum + (p.overtimeHours ?? 0), 0)
     const lateCount = completed.filter(p => (p.lateMinutes ?? 0) > 0).length
     const totalLateMinutes = completed.reduce((sum, p) => sum + (p.lateMinutes ?? 0), 0)
+    const lateHours = Math.round((totalLateMinutes / 60) * 100) / 100
 
-    // Estimation gains : daysWorked * VACATION_RATE
-    const estimatedEarnings = daysWorked * HrService.VACATION_RATE
+    // ── Calculs financiers ──
+    const grossEarnings = daysWorked * vacationRate
+    const lateDeduction = Math.ceil(lateHours) * latePenaltyPerHour
+    const missingDays = Math.max(0, expectedDays - daysWorked)
+    const missingHours = Math.max(0, Math.round((expectedHours - totalHours) * 100) / 100)
+    const missingDaysDeduction = missingDays * vacationRate
+    const totalDeductions = lateDeduction + missingDaysDeduction
 
-    // Taux de présence
+    // Services extra
+    const extraServicesCount = extraServices.length
+    const extraServicesHours = extraServices.reduce((sum, e: any) => sum + (e.hours ?? 0), 0)
+    const extraServicesEarnings = extraServices.reduce((sum, e: any) => sum + (e.amount ?? vacationRate), 0)
+
+    // Net estimé
+    const netEarnings = grossEarnings - lateDeduction + extraServicesEarnings
+
+    // Rattrapage
+    const rattrapageEligible = missingHours > 0
+    const rattrapageHoursNeeded = missingHours
+
     const attendanceRate = expectedDays > 0 ? Math.round((daysWorked / expectedDays) * 100) : 0
-
-    // Taux de remplissage (heures réelles / heures attendues)
     const fillRate = expectedHours > 0 ? Math.round((totalHours / expectedHours) * 100) : 0
 
     return {
@@ -187,6 +197,7 @@ export class HrService {
       year: y,
       shift: agent.shift,
       hoursPerDay,
+      vacationRate,
       daysInMonth,
       expectedDays,
       expectedHours,
@@ -196,11 +207,33 @@ export class HrService {
       overtimeHours: Math.round(overtimeHours * 100) / 100,
       lateCount,
       totalLateMinutes,
+      lateHours,
+      latePenaltyPerHour,
+      lateDeduction,
+      missingDays,
+      missingHours,
+      missingDaysDeduction,
+      totalDeductions,
+      grossEarnings,
+      netEarnings,
       inProgressCount: inProgress.length,
       absentCount: absent.length,
-      estimatedEarnings,
       attendanceRate,
       fillRate,
+      rattrapageEligible,
+      rattrapageHoursNeeded,
+      extraServices: extraServices.map((e: any) => ({
+        id: e.id,
+        date: e.date,
+        hours: e.hours,
+        description: e.description,
+        amount: e.amount,
+        status: e.status,
+        assignedByName: e.assignedByName,
+      })),
+      extraServicesCount,
+      extraServicesHours,
+      extraServicesEarnings,
       recentPointages: pointages.slice(0, 10),
     }
   }
@@ -675,5 +708,55 @@ export class HrService {
       this.prisma.agent.count({ where: { behaviorRating: 'INDISCIPLINE' } }),
     ])
     return { totalAgents, onDuty, onLeave, pendingLeaves, absent: totalAgents - onDuty - onLeave, contractsExpiring, indisciplined }
+  }
+
+  // ── Services Extra (assignés par le chef des opérations) ──
+  async assignExtraService(agentId: string, data: { date: string; hours?: number; amount?: number; description?: string; assignedById?: string; assignedByName?: string }) {
+    const agent = await this.prisma.agent.findUnique({ where: { id: agentId } })
+    if (!agent) throw new NotFoundException('Agent introuvable')
+
+    return this.prisma.extraService.create({
+      data: {
+        agentId,
+        date: new Date(data.date),
+        hours: data.hours ?? 12,
+        amount: data.amount ?? HrService.VACATION_RATE,
+        description: data.description,
+        assignedById: data.assignedById,
+        assignedByName: data.assignedByName,
+        status: 'EN_ATTENTE',
+      },
+    })
+  }
+
+  async getExtraServices(agentId: string, month?: number, year?: number) {
+    const now = new Date()
+    const m = month ?? now.getMonth() + 1
+    const y = year ?? now.getFullYear()
+    const monthStart = new Date(y, m - 1, 1)
+    const monthEnd = new Date(y, m, 1)
+
+    return this.prisma.extraService.findMany({
+      where: { agentId, date: { gte: monthStart, lt: monthEnd } },
+      orderBy: { date: 'desc' },
+    })
+  }
+
+  async validateExtraService(id: string) {
+    const svc = await this.prisma.extraService.findUnique({ where: { id } })
+    if (!svc) throw new NotFoundException('Service extra introuvable')
+    return this.prisma.extraService.update({
+      where: { id },
+      data: { status: 'VALIDEE' },
+    })
+  }
+
+  async cancelExtraService(id: string) {
+    const svc = await this.prisma.extraService.findUnique({ where: { id } })
+    if (!svc) throw new NotFoundException('Service extra introuvable')
+    return this.prisma.extraService.update({
+      where: { id },
+      data: { status: 'ANNULEE' },
+    })
   }
 }
