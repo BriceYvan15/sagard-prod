@@ -169,13 +169,22 @@ export class HrService {
     const lateHours = Math.round((totalLateMinutes / 60) * 100) / 100
 
     // ── Calculs financiers ──
-    // 1) Gains complets : 2500 F par vacation terminée
-    const completedEarnings = daysWorked * vacationRate
+    // Taux horaire = 2500 / heuresParJour (ex: 2500/12 ≈ 208 F/h)
+    // Pas de décimales en FCFA → Math.round
+    // Un agent qui travaille 55 min gagne: Math.round(0.917 * 208) = 191 F
+    // Un agent qui fait ses 12h complètes gagne: 2500 F (plafond)
+    const hourlyRate = vacationRate / hoursPerDay
+
+    // 1) Gains des vacations terminées : au prorata des heures réellement travaillées
+    const completedEarningsDetails = completed.map(p => {
+      const hours = Math.min(hoursPerDay, p.hoursWorked ?? 0)
+      const earned = Math.round(hours * hourlyRate)
+      return { pointageId: p.id, hours: Math.round(hours * 100) / 100, earned }
+    })
+    const completedEarnings = completedEarningsDetails.reduce((sum, e) => sum + e.earned, 0)
 
     // 2) Gains partiels : pour les services en cours, on calcule au prorata
-    //    Taux horaire = 2500 / heuresParJour (ex: 2500/12 ≈ 208 F/h)
-    //    Pas de décimales en FCFA → Math.round
-    const hourlyRate = vacationRate / hoursPerDay
+    //    basé sur le temps écoulé depuis le check-in
     const partialEarningsDetails = inProgress.map(p => {
       const checkIn = p.checkInTime ? new Date(p.checkInTime) : null
       const elapsedHours = checkIn ? Math.min(hoursPerDay, (today.getTime() - checkIn.getTime()) / 3600000) : 0
@@ -233,6 +242,7 @@ export class HrService {
       missingDaysDeduction,
       totalDeductions,
       completedEarnings,
+      completedEarningsDetails,
       partialEarnings,
       partialEarningsDetails,
       grossEarnings,
