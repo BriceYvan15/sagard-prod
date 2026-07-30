@@ -123,9 +123,9 @@ export class HrService {
   //   - Rattrapage : possible pour les heures manquées (à valider par le chef)
   //   - Services extra : assignés par le chef des opérations, rémunérés à 2500 F/vacation
   async getWorkStats(agentId: string, month?: number, year?: number) {
-    const now = new Date()
-    const m = month ?? now.getMonth() + 1
-    const y = year ?? now.getFullYear()
+    const today = new Date()
+    const m = month ?? today.getMonth() + 1
+    const y = year ?? today.getFullYear()
 
     const agent = await this.prisma.agent.findUnique({
       where: { id: agentId },
@@ -157,39 +157,57 @@ export class HrService {
     }).catch(() => [] as Awaited<ReturnType<typeof this.prisma.extraService.findMany>>)
 
     const completed = pointages.filter(p => p.status === 'TERMINE')
-    const inProgress = pointages.filter(p => p.status === 'EN_COURS')
+    const inProgress = pointages.filter(p => p.status === 'EN_COURS' || p.status === 'RETARD')
     const absent = pointages.filter(p => p.status === 'ABSENT')
 
     const daysWorked = completed.length
-    const totalHours = completed.reduce((sum, p) => sum + (p.hoursWorked ?? 0), 0)
-    const totalMinutes = Math.round(totalHours * 60)
+    const totalHoursCompleted = completed.reduce((sum, p) => sum + (p.hoursWorked ?? 0), 0)
+    const totalMinutes = Math.round(totalHoursCompleted * 60)
     const overtimeHours = completed.reduce((sum, p) => sum + (p.overtimeHours ?? 0), 0)
     const lateCount = completed.filter(p => (p.lateMinutes ?? 0) > 0).length
     const totalLateMinutes = completed.reduce((sum, p) => sum + (p.lateMinutes ?? 0), 0)
     const lateHours = Math.round((totalLateMinutes / 60) * 100) / 100
 
     // ── Calculs financiers ──
-    const grossEarnings = daysWorked * vacationRate
+    // 1) Gains complets : 2500 F par vacation terminée
+    const completedEarnings = daysWorked * vacationRate
+
+    // 2) Gains partiels : pour les services en cours, on calcule au prorata
+    //    Taux horaire = 2500 / heuresParJour (ex: 2500/12 ≈ 208 F/h)
+    //    Pas de décimales en FCFA → Math.round
+    const hourlyRate = vacationRate / hoursPerDay
+    const partialEarningsDetails = inProgress.map(p => {
+      const checkIn = p.checkInTime ? new Date(p.checkInTime) : null
+      const elapsedHours = checkIn ? Math.min(hoursPerDay, (today.getTime() - checkIn.getTime()) / 3600000) : 0
+      const earned = Math.round(elapsedHours * hourlyRate)
+      return { pointageId: p.id, elapsedHours: Math.round(elapsedHours * 100) / 100, earned }
+    })
+    const partialEarnings = partialEarningsDetails.reduce((sum, e) => sum + e.earned, 0)
+    const partialHours = partialEarningsDetails.reduce((sum, e) => sum + e.elapsedHours, 0)
+
+    const grossEarnings = completedEarnings + partialEarnings
     const lateDeduction = Math.ceil(lateHours) * latePenaltyPerHour
-    const missingDays = Math.max(0, expectedDays - daysWorked)
-    const missingHours = Math.max(0, Math.round((expectedHours - totalHours) * 100) / 100)
+    // Les jours en cours ne sont pas comptés comme manqués
+    const missingDays = Math.max(0, expectedDays - daysWorked - inProgress.length)
+    const totalHoursAll = totalHoursCompleted + partialHours
+    const missingHours = Math.max(0, Math.round((expectedHours - totalHoursAll) * 100) / 100)
     const missingDaysDeduction = missingDays * vacationRate
     const totalDeductions = lateDeduction + missingDaysDeduction
 
     // Services extra
     const extraServicesCount = extraServices.length
     const extraServicesHours = extraServices.reduce((sum, e: any) => sum + (e.hours ?? 0), 0)
-    const extraServicesEarnings = extraServices.reduce((sum, e: any) => sum + (e.amount ?? vacationRate), 0)
+    const extraServicesEarnings = Math.round(extraServices.reduce((sum, e: any) => sum + Number(e.amount ?? vacationRate), 0))
 
-    // Net estimé
-    const netEarnings = grossEarnings - lateDeduction + extraServicesEarnings
+    // Net estimé (arrondi sans décimales)
+    const netEarnings = Math.round(grossEarnings - lateDeduction + extraServicesEarnings)
 
     // Rattrapage
     const rattrapageEligible = missingHours > 0
     const rattrapageHoursNeeded = missingHours
 
     const attendanceRate = expectedDays > 0 ? Math.round((daysWorked / expectedDays) * 100) : 0
-    const fillRate = expectedHours > 0 ? Math.round((totalHours / expectedHours) * 100) : 0
+    const fillRate = expectedHours > 0 ? Math.round((totalHoursAll / expectedHours) * 100) : 0
 
     return {
       agentId,
@@ -202,7 +220,7 @@ export class HrService {
       expectedDays,
       expectedHours,
       daysWorked,
-      hoursWorked: Math.round(totalHours * 100) / 100,
+      hoursWorked: Math.round(totalHoursAll * 100) / 100,
       minutesWorked: totalMinutes,
       overtimeHours: Math.round(overtimeHours * 100) / 100,
       lateCount,
@@ -214,6 +232,9 @@ export class HrService {
       missingHours,
       missingDaysDeduction,
       totalDeductions,
+      completedEarnings,
+      partialEarnings,
+      partialEarningsDetails,
       grossEarnings,
       netEarnings,
       inProgressCount: inProgress.length,
