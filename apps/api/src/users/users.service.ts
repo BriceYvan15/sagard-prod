@@ -40,6 +40,7 @@ export class UsersService {
   async create(data: {
     email: string; phone: string; password: string; role: Role;
     firstName: string; lastName: string; whatsappPhone?: string;
+    clientId?: string;
   }) {
     const exists = await this.prisma.user.findFirst({
       where: { OR: [{ email: data.email }, { phone: data.phone }] },
@@ -47,7 +48,7 @@ export class UsersService {
     if (exists) throw new ConflictException('Email ou téléphone déjà utilisé')
 
     const passwordHash = await bcrypt.hash(data.password, 12)
-    return this.prisma.user.create({
+    const user = await this.prisma.user.create({
       data: {
         email: data.email, phone: data.phone, passwordHash,
         role: data.role, firstName: data.firstName, lastName: data.lastName,
@@ -58,6 +59,15 @@ export class UsersService {
         firstName: true, lastName: true, createdAt: true,
       },
     })
+
+    if (data.role === 'CLIENT' && data.clientId) {
+      await this.prisma.client.update({
+        where: { id: data.clientId },
+        data: { userId: user.id },
+      })
+    }
+
+    return user
   }
 
   async update(id: string, data: {
