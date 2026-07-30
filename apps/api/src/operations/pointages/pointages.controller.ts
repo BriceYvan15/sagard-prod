@@ -41,6 +41,17 @@ export class PointagesController {
     return this.pointagesService.getPointagesByDate(new Date(date), { siteId, shift })
   }
 
+  @Get('range')
+  @ApiOperation({ summary: 'Pointages sur une plage de dates' })
+  getRange(
+    @Query('start') start: string,
+    @Query('end') end: string,
+    @Query('siteId') siteId?: string,
+    @Query('shift') shift?: string,
+  ) {
+    return this.pointagesService.getPointagesRange(new Date(start), new Date(end), { siteId, shift })
+  }
+
   @Get('agent/:agentId')
   @ApiOperation({ summary: 'Pointages d\'un agent' })
   getAgentPointages(
