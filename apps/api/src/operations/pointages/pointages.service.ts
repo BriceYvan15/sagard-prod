@@ -199,6 +199,28 @@ export class PointagesService {
     })
   }
 
+  async getPointagesRange(startDate: Date, endDate: Date, filters?: { siteId?: string; shift?: string }) {
+    const start = new Date(startDate)
+    start.setHours(0, 0, 0, 0)
+    const end = new Date(endDate)
+    end.setHours(23, 59, 59, 999)
+
+    return this.prisma.pointage.findMany({
+      where: {
+        date: { gte: start, lte: end },
+        ...(filters?.siteId && { siteId: filters.siteId }),
+        ...(filters?.shift && { shift: filters.shift as any }),
+      },
+      include: {
+        agent: {
+          select: { id: true, matricule: true, shift: true, user: { select: { firstName: true, lastName: true, phone: true, photoUrl: true } } },
+        },
+        deployment: { select: { id: true, reference: true, site: { select: { id: true, name: true, code: true, latitude: true, longitude: true, address: true, district: true } } } },
+      },
+      orderBy: [{ date: 'desc' }, { checkInTime: 'desc' }],
+    })
+  }
+
   async getAgentPointages(agentId: string, startDate: Date, endDate: Date) {
     return this.prisma.pointage.findMany({
       where: {
