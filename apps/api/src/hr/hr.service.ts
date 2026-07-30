@@ -154,7 +154,7 @@ export class HrService {
     const extraServices = await this.prisma.extraService.findMany({
       where: { agentId, date: { gte: monthStart, lt: monthEnd } },
       orderBy: { date: 'desc' },
-    }).catch(() => [])
+    }).catch(() => [] as Awaited<ReturnType<typeof this.prisma.extraService.findMany>>)
 
     const completed = pointages.filter(p => p.status === 'TERMINE')
     const inProgress = pointages.filter(p => p.status === 'EN_COURS')
