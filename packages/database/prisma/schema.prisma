@@ -580,6 +580,7 @@ model User {
   terminatedAgents         Agent[]    @relation("AgentTerminatedBy")
   clientAccount            Client?
   interventions            Intervention[] @relation("InterventionTechnician")
+  trainingSessionsCreated  TrainingSession[] @relation("TrainingSessionCreatedBy")
 
   @@map("users")
 }
@@ -972,6 +973,7 @@ model Agent {
   leaves            Leave[]
   payrolls          PayrollLine[]
   trainings         Training[]
+  trainingParticipations TrainingParticipant[]
   disciplinary      DisciplinaryRecord[]
   candidacy         Candidacy?
   transfers         AgentTransfer[]    @relation("TransferAgent")
@@ -2039,4 +2041,84 @@ model Intervention {
   updatedAt       DateTime           @updatedAt
 
   @@map("interventions")
+}
+// ===============================================================
+//  FORMATIONS GROUPÉES (QCM, Lecture, Vidéo, Pratique)
+// ===============================================================
+
+enum TrainingType {
+  QCM
+  LECTURE
+  VIDEO
+  PRATIQUE
+}
+
+enum TrainingSessionStatus {
+  BROUILLON
+  PUBLIEE
+  CLOTUREE
+}
+
+enum TrainingParticipantStatus {
+  ASSIGNEE
+  EN_COURS
+  TERMINE
+  REUSSI
+  ECHOUE
+}
+
+model TrainingSession {
+  id            String                @id @default(uuid())
+  title         String
+  description   String?
+  type          TrainingType
+  status        TrainingSessionStatus @default(BROUILLON)
+  trainer       String?
+  location      String?
+  startDate     DateTime?
+  endDate       DateTime?
+  passingScore  Int                   @default(70)
+  content       String?
+  videoUrl      String?
+  createdById   String?
+  createdBy     User?                 @relation("TrainingSessionCreatedBy", fields: [createdById], references: [id])
+  questions     TrainingQuestion[]
+  participants  TrainingParticipant[]
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  @@map("training_sessions")
+}
+
+model TrainingQuestion {
+  id           String          @id @default(uuid())
+  sessionId     String
+  session       TrainingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  question     String
+  options      String[]
+  correctIndex  Int
+  points       Int             @default(1)
+  createdAt     DateTime        @default(now())
+
+  @@map("training_questions")
+}
+
+model TrainingParticipant {
+  id                String                  @id @default(uuid())
+  sessionId         String
+  session           TrainingSession         @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  agentId           String
+  agent             Agent                   @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  status            TrainingParticipantStatus @default(ASSIGNEE)
+  score             Int?
+  answers           Json?
+  startedAt         DateTime?
+  completedAt       DateTime?
+  integrationStepId String?
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+
+  @@unique([sessionId, agentId])
+  @@index([agentId])
+  @@map("training_participants")
 }

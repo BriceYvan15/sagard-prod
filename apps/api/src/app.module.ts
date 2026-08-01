@@ -38,6 +38,7 @@ import { SettingsModule } from './settings/settings.module'
 import { MailModule } from './mail/mail.module'
 import { ClientModule } from './client/client.module'
 import { InterventionsModule } from './interventions/interventions.module'
+import { TrainingsModule } from './trainings/trainings.module'
 
 @Module({
   imports: [
@@ -92,6 +93,7 @@ import { InterventionsModule } from './interventions/interventions.module'
     MailModule,
     ClientModule,
     InterventionsModule,
+    TrainingsModule,
   ],
 })
 export class AppModule {}
