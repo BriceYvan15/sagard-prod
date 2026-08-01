@@ -52,17 +52,19 @@ export class ClientService {
         select: { agentId: true, status: true, checkInTime: true, shift: true },
       })
 
-      const agentsOnPost = todayPointages.length
-      const agentsAssigned = deployments.length
-
-      return {
-        ...site,
-        agentsAssigned,
-        agentsOnPost,
-        agents: deployments.map((d) => {
+      // Deduplicate by agent ID (an agent may have multiple active deployments)
+      const seenAgentIds = new Set<string>()
+      const agents = deployments
+        .filter((d) => {
+          if (seenAgentIds.has(d.agent.id)) return false
+          seenAgentIds.add(d.agent.id)
+          return true
+        })
+        .map((d) => {
           const pointage = todayPointages.find((p) => p.agentId === d.agentId)
           return {
             id: d.agent.id,
+            deploymentId: d.id,
             matricule: d.agent.matricule,
             firstName: d.agent.user.firstName,
             lastName: d.agent.user.lastName,
@@ -74,7 +76,16 @@ export class ClientService {
             pointageStatus: pointage?.status ?? null,
             checkInTime: pointage?.checkInTime ?? null,
           }
-        }),
+        })
+
+      const agentsOnPost = todayPointages.length
+      const agentsAssigned = agents.length
+
+      return {
+        ...site,
+        agentsAssigned,
+        agentsOnPost,
+        agents,
       }
     }))
 
