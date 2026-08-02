@@ -444,20 +444,24 @@ export class HrService {
       include: { agent: { include: { user: { select: { firstName: true, lastName: true } } } } },
     })
 
-    // Notify DG and RH
-    const recipients = await this.prisma.user.findMany({
-      where: { role: { in: ['DIRECTEUR_GENERAL', 'RH'] as any }, status: 'ACTIF' },
-      select: { id: true },
-    })
-    const agentName = `${leave.agent.user.firstName} ${leave.agent.user.lastName}`
-    for (const r of recipients) {
-      await this.notifications.create({
-        userId: r.id,
-        type: 'CONGE' as any,
-        title: 'Demande de congé',
-        message: `${agentName} a demandé un congé (${data.type}) du ${new Date(data.startDate).toLocaleDateString('fr-FR')} au ${new Date(data.endDate).toLocaleDateString('fr-FR')} (${days} jour(s))`,
-        data: { leaveId: leave.id, agentId },
+    // Notify DG and RH (non-blocking: don't fail the request if notifications fail)
+    try {
+      const recipients = await this.prisma.user.findMany({
+        where: { role: { in: ['DIRECTEUR_GENERAL', 'RH'] as any }, status: 'ACTIF' },
+        select: { id: true },
       })
+      const agentName = `${leave.agent.user.firstName} ${leave.agent.user.lastName}`
+      for (const r of recipients) {
+        await this.notifications.create({
+          userId: r.id,
+          type: 'CONGE' as any,
+          title: 'Demande de congé',
+          message: `${agentName} a demandé un congé (${data.type}) du ${new Date(data.startDate).toLocaleDateString('fr-FR')} au ${new Date(data.endDate).toLocaleDateString('fr-FR')} (${days} jour(s))`,
+          data: { leaveId: leave.id, agentId },
+        })
+      }
+    } catch (notifErr) {
+      console.error('Failed to send leave notifications:', notifErr?.message)
     }
 
     return leave
@@ -470,15 +474,19 @@ export class HrService {
       include: { agent: { select: { userId: true } } },
     })
 
-    // Notify the agent
-    if (leave.agent?.userId) {
-      await this.notifications.create({
-        userId: leave.agent.userId,
-        type: 'CONGE' as any,
-        title: 'Congé approuvé',
-        message: `Votre demande de congé du ${new Date(leave.startDate).toLocaleDateString('fr-FR')} au ${new Date(leave.endDate).toLocaleDateString('fr-FR')} a été approuvée`,
-        data: { leaveId: leave.id },
-      })
+    // Notify the agent (non-blocking)
+    try {
+      if (leave.agent?.userId) {
+        await this.notifications.create({
+          userId: leave.agent.userId,
+          type: 'CONGE' as any,
+          title: 'Congé approuvé',
+          message: `Votre demande de congé du ${new Date(leave.startDate).toLocaleDateString('fr-FR')} au ${new Date(leave.endDate).toLocaleDateString('fr-FR')} a été approuvée`,
+          data: { leaveId: leave.id },
+        })
+      }
+    } catch (notifErr) {
+      console.error('Failed to send leave approval notification:', notifErr?.message)
     }
 
     return leave
@@ -491,15 +499,19 @@ export class HrService {
       include: { agent: { select: { userId: true } } },
     })
 
-    // Notify the agent
-    if (leave.agent?.userId) {
-      await this.notifications.create({
-        userId: leave.agent.userId,
-        type: 'CONGE' as any,
-        title: 'Congé refusé',
-        message: `Votre demande de congé du ${new Date(leave.startDate).toLocaleDateString('fr-FR')} au ${new Date(leave.endDate).toLocaleDateString('fr-FR')} a été refusée`,
-        data: { leaveId: leave.id },
-      })
+    // Notify the agent (non-blocking)
+    try {
+      if (leave.agent?.userId) {
+        await this.notifications.create({
+          userId: leave.agent.userId,
+          type: 'CONGE' as any,
+          title: 'Congé refusé',
+          message: `Votre demande de congé du ${new Date(leave.startDate).toLocaleDateString('fr-FR')} au ${new Date(leave.endDate).toLocaleDateString('fr-FR')} a été refusée`,
+          data: { leaveId: leave.id },
+        })
+      }
+    } catch (notifErr) {
+      console.error('Failed to send leave rejection notification:', notifErr?.message)
     }
 
     return leave
