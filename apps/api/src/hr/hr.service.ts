@@ -439,20 +439,70 @@ export class HrService {
 
   async requestLeave(agentId: string, data: { type: string; startDate: Date; endDate: Date; reason?: string }) {
     const days = Math.ceil((new Date(data.endDate).getTime() - new Date(data.startDate).getTime()) / 86_400_000) + 1
-    return this.prisma.leave.create({
+    const leave = await this.prisma.leave.create({
       data: { agentId, type: data.type as any, startDate: data.startDate, endDate: data.endDate, days, reason: data.reason, status: 'EN_ATTENTE' },
+      include: { agent: { include: { user: { select: { firstName: true, lastName: true } } } } },
     })
+
+    // Notify DG and RH
+    const recipients = await this.prisma.user.findMany({
+      where: { role: { in: ['DIRECTEUR_GENERAL', 'RH'] as any }, status: 'ACTIF' },
+      select: { id: true },
+    })
+    const agentName = `${leave.agent.user.firstName} ${leave.agent.user.lastName}`
+    for (const r of recipients) {
+      await this.notifications.create({
+        userId: r.id,
+        type: 'CONGE' as any,
+        title: 'Demande de congé',
+        message: `${agentName} a demandé un congé (${data.type}) du ${new Date(data.startDate).toLocaleDateString('fr-FR')} au ${new Date(data.endDate).toLocaleDateString('fr-FR')} (${days} jour(s))`,
+        data: { leaveId: leave.id, agentId },
+      })
+    }
+
+    return leave
   }
 
   async approveLeave(leaveId: string, approvedBy: string) {
-    return this.prisma.leave.update({
+    const leave = await this.prisma.leave.update({
       where: { id: leaveId },
       data: { status: 'APPROUVE', approvedBy, approvedAt: new Date() },
+      include: { agent: { select: { userId: true } } },
     })
+
+    // Notify the agent
+    if (leave.agent?.userId) {
+      await this.notifications.create({
+        userId: leave.agent.userId,
+        type: 'CONGE' as any,
+        title: 'Congé approuvé',
+        message: `Votre demande de congé du ${new Date(leave.startDate).toLocaleDateString('fr-FR')} au ${new Date(leave.endDate).toLocaleDateString('fr-FR')} a été approuvée`,
+        data: { leaveId: leave.id },
+      })
+    }
+
+    return leave
   }
 
   async rejectLeave(leaveId: string) {
-    return this.prisma.leave.update({ where: { id: leaveId }, data: { status: 'REFUSE' } })
+    const leave = await this.prisma.leave.update({
+      where: { id: leaveId },
+      data: { status: 'REFUSE' },
+      include: { agent: { select: { userId: true } } },
+    })
+
+    // Notify the agent
+    if (leave.agent?.userId) {
+      await this.notifications.create({
+        userId: leave.agent.userId,
+        type: 'CONGE' as any,
+        title: 'Congé refusé',
+        message: `Votre demande de congé du ${new Date(leave.startDate).toLocaleDateString('fr-FR')} au ${new Date(leave.endDate).toLocaleDateString('fr-FR')} a été refusée`,
+        data: { leaveId: leave.id },
+      })
+    }
+
+    return leave
   }
 
   // ── Formations ──────────────────────────────────────────────────────
