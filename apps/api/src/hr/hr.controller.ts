@@ -80,19 +80,13 @@ export class HrController {
   @Post('leaves')
   @ApiOperation({ summary: 'Créer une demande de congé' })
   async requestLeave(@Body() body: any) {
-    this.logger.log(`requestLeave called with body: ${JSON.stringify(body)}`)
     try {
-      const result = await this.hrService.requestLeave(body.agentId, body)
-      this.logger.log(`requestLeave success`)
-      return result
+      return await this.hrService.requestLeave(body.agentId, body)
     } catch (err) {
-      this.logger.error(`requestLeave ERROR: ${err?.message ?? err}`)
-      this.logger.error(`requestLeave ERROR code: ${err?.code ?? 'no code'}`)
-      this.logger.error(`requestLeave ERROR stack: ${err?.stack ?? 'no stack'}`)
+      this.logger.error(`requestLeave error: ${err?.message}`, err?.stack)
       throw new BadRequestException({
         message: err?.message ?? 'Erreur inconnue',
         code: err?.code ?? 'UNKNOWN',
-        meta: err?.meta ?? undefined,
       })
     }
   }

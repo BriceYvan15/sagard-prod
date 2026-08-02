@@ -63,8 +63,8 @@ jobs:
           # --- Migration Prisma : marquer les migrations échouées comme résolues, puis appliquer ---
           $SSH root@"$HOST" "cd /opt/sagard/api && npx prisma@5.22.0 migrate resolve --rolled-back 20260723160000_treasury_management --schema=packages/database/prisma/schema.prisma 2>/dev/null || true"
           # Compléter la migration training_sessions si elle a été partiellement appliquée (ALTER TYPE manquant)
-          $SSH root@"$HOST" "cd /opt/sagard/api && PGPASSWORD=\$(echo \$DATABASE_URL | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p') psql \"\$DATABASE_URL\" -c \"ALTER TYPE \\\"NotificationType\\\" ADD VALUE IF NOT EXISTS 'FORMATION';\" 2>/dev/null || true"
-          $SSH root@"$HOST" "cd /opt/sagard/api && PGPASSWORD=\$(echo \$DATABASE_URL | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p') psql \"\$DATABASE_URL\" -c \"ALTER TYPE \\\"NotificationType\\\" ADD VALUE IF NOT EXISTS 'CONGE';\" 2>/dev/null || true"
+          $SSH root@"$HOST" "cd /opt/sagard/api && psql \"\$DATABASE_URL\" -c \"ALTER TYPE \\\"NotificationType\\\" ADD VALUE IF NOT EXISTS 'FORMATION';\" || true"
+          $SSH root@"$HOST" "cd /opt/sagard/api && psql \"\$DATABASE_URL\" -c \"ALTER TYPE \\\"NotificationType\\\" ADD VALUE IF NOT EXISTS 'CONGE';\" || true"
           $SSH root@"$HOST" "cd /opt/sagard/api && npx prisma@5.22.0 migrate resolve --applied 20260801150000_training_sessions --schema=packages/database/prisma/schema.prisma 2>/dev/null || true"
           $SSH root@"$HOST" "cd /opt/sagard/api && npx prisma@5.22.0 migrate deploy --schema=packages/database/prisma/schema.prisma"
           # Régénérer le client Prisma sur le serveur avec le nouveau schéma
