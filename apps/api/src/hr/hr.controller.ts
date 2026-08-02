@@ -1,4 +1,4 @@
-﻿import { Controller, Get, Post, Patch, Param, Body, Query, UseGuards, Request } from '@nestjs/common'
+﻿import { Controller, Get, Post, Patch, Param, Body, Query, UseGuards, Request, BadRequestException } from '@nestjs/common'
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger'
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard'
 import { HrService } from './hr.service'
@@ -83,13 +83,17 @@ export class HrController {
     this.logger.log(`requestLeave called with body: ${JSON.stringify(body)}`)
     try {
       const result = await this.hrService.requestLeave(body.agentId, body)
-      this.logger.log(`requestLeave success: ${JSON.stringify(result)}`)
+      this.logger.log(`requestLeave success`)
       return result
     } catch (err) {
       this.logger.error(`requestLeave ERROR: ${err?.message ?? err}`)
+      this.logger.error(`requestLeave ERROR code: ${err?.code ?? 'no code'}`)
       this.logger.error(`requestLeave ERROR stack: ${err?.stack ?? 'no stack'}`)
-      this.logger.error(`requestLeave ERROR full: ${JSON.stringify(err, null, 2)}`)
-      throw err
+      throw new BadRequestException({
+        message: err?.message ?? 'Erreur inconnue',
+        code: err?.code ?? 'UNKNOWN',
+        meta: err?.meta ?? undefined,
+      })
     }
   }
 
