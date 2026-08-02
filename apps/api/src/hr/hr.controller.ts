@@ -2,12 +2,14 @@
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger'
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard'
 import { HrService } from './hr.service'
+import { Logger } from '@nestjs/common'
 
 @ApiTags('RH')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('hr')
 export class HrController {
+  private readonly logger = new Logger(HrController.name)
   constructor(private hrService: HrService) {}
 
   @Get('stats')
@@ -77,7 +79,19 @@ export class HrController {
 
   @Post('leaves')
   @ApiOperation({ summary: 'Créer une demande de congé' })
-  requestLeave(@Body() body: any) { return this.hrService.requestLeave(body.agentId, body) }
+  async requestLeave(@Body() body: any) {
+    this.logger.log(`requestLeave called with body: ${JSON.stringify(body)}`)
+    try {
+      const result = await this.hrService.requestLeave(body.agentId, body)
+      this.logger.log(`requestLeave success: ${JSON.stringify(result)}`)
+      return result
+    } catch (err) {
+      this.logger.error(`requestLeave ERROR: ${err?.message ?? err}`)
+      this.logger.error(`requestLeave ERROR stack: ${err?.stack ?? 'no stack'}`)
+      this.logger.error(`requestLeave ERROR full: ${JSON.stringify(err, null, 2)}`)
+      throw err
+    }
+  }
 
   @Patch('leaves/:id/approve')
   approveLeave(@Param('id') id: string, @Request() req: any) {
