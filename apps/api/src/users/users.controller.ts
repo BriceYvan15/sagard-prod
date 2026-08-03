@@ -33,8 +33,14 @@ export class UsersController {
 
   @Patch(':id')
   @Roles(Role.DIRECTEUR_GENERAL)
-  update(@Param('id') id: string, @Body() body: any, @Request() req: any) {
-    return this.usersService.update(id, body, req.user?.id)
+  update(@Param('id') id: string, @Body() body: any) {
+    return this.usersService.update(id, body)
+  }
+
+  @Patch(':id/role')
+  @Roles(Role.DIRECTEUR_GENERAL)
+  changeRole(@Param('id') id: string, @Body() body: any, @Request() req: any) {
+    return this.usersService.changeRole(id, body.role, req.user?.id)
   }
 
   @Patch(':id/suspend')

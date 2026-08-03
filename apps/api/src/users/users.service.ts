@@ -71,16 +71,11 @@ export class UsersService {
   }
 
   async update(id: string, data: {
-    email?: string; phone?: string; password?: string; role?: Role;
+    email?: string; phone?: string; password?: string;
     firstName?: string; lastName?: string; whatsappPhone?: string;
-  }, currentUserId?: string) {
+  }) {
     const user = await this.prisma.user.findUnique({ where: { id } })
     if (!user) throw new NotFoundException('Utilisateur introuvable')
-
-    // Empêcher un utilisateur de modifier son propre rôle (anti-escalade)
-    if (data.role && currentUserId === id) {
-      throw new ForbiddenException('Vous ne pouvez pas modifier votre propre rôle')
-    }
 
     if (data.email && data.email !== user.email) {
       const exists = await this.prisma.user.findFirst({ where: { email: data.email, NOT: { id } } })
@@ -94,7 +89,6 @@ export class UsersService {
     const updateData: any = {}
     if (data.email) updateData.email = data.email
     if (data.phone) updateData.phone = data.phone
-    if (data.role) updateData.role = data.role
     if (data.firstName) updateData.firstName = data.firstName
     if (data.lastName) updateData.lastName = data.lastName
     if (data.whatsappPhone !== undefined) updateData.whatsappPhone = data.whatsappPhone
@@ -108,6 +102,23 @@ export class UsersService {
         firstName: true, lastName: true, photoUrl: true, whatsappPhone: true,
         lastLoginAt: true, createdAt: true,
         agent: { select: { id: true, matricule: true, position: true, status: true } },
+      },
+    })
+  }
+
+  async changeRole(id: string, newRole: Role, currentUserId: string) {
+    if (currentUserId === id) {
+      throw new ForbiddenException('Vous ne pouvez pas modifier votre propre rôle')
+    }
+    const user = await this.prisma.user.findUnique({ where: { id } })
+    if (!user) throw new NotFoundException('Utilisateur introuvable')
+
+    return this.prisma.user.update({
+      where: { id },
+      data: { role: newRole },
+      select: {
+        id: true, email: true, role: true, status: true,
+        firstName: true, lastName: true,
       },
     })
   }
