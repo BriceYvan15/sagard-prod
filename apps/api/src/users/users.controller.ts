@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Param, Body, Query, UseGuards } from '@nestjs/common'
+import { Controller, Get, Post, Patch, Param, Body, Query, UseGuards, Request } from '@nestjs/common'
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger'
 import { UsersService } from './users.service'
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard'
@@ -33,8 +33,8 @@ export class UsersController {
 
   @Patch(':id')
   @Roles(Role.DIRECTEUR_GENERAL)
-  update(@Param('id') id: string, @Body() body: any) {
-    return this.usersService.update(id, body)
+  update(@Param('id') id: string, @Body() body: any, @Request() req: any) {
+    return this.usersService.update(id, body, req.user?.id)
   }
 
   @Patch(':id/suspend')
