@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, Users, FileText, MapPin, Shield, ClipboardList,
-  Receipt, Package, Car, UserCheck, LogOut, ChevronRight, ShieldCheck,
+  Receipt, Package, Car, UserCheck, LogOut, ChevronRight, ShieldCheck, Footprints,
 } from 'lucide-react'
 import { useAuthStore } from '@/store/auth.store'
 import { clsx } from 'clsx'
@@ -16,6 +16,7 @@ const nav = [
   { href: '/sites',       label: 'Sites',            icon: MapPin,          roles: ['DIRECTEUR_GENERAL','CHEF_OPERATIONS'] },
   { href: '/agents',      label: 'Agents',           icon: Shield,          roles: ['DIRECTEUR_GENERAL','CHEF_OPERATIONS','RH'] },
   { href: '/operations',  label: 'Opérations',       icon: ClipboardList,   roles: ['DIRECTEUR_GENERAL','CHEF_OPERATIONS','CONTROLEUR'] },
+  { href: '/rondes',      label: 'Rondes',            icon: Footprints,      roles: ['DIRECTEUR_GENERAL','CHEF_OPERATIONS','CONTROLEUR'] },
   { href: '/rh',          label: 'Ressources Humaines', icon: UserCheck,    roles: ['DIRECTEUR_GENERAL','RH'] },
   { href: '/stock',       label: 'Stock & Véhicules', icon: Package,        roles: ['DIRECTEUR_GENERAL','CHEF_OPERATIONS'] },
   { href: '/vehicules',   label: 'Véhicules',        icon: Car,             roles: ['DIRECTEUR_GENERAL','CHEF_OPERATIONS'] },

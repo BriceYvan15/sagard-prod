@@ -70,3 +70,8 @@ export const notificationsApi = {
   markRead:   (id: string) => api.patch(`/notifications/${id}/read`),
   markAllRead: () => api.patch('/notifications/read-all'),
 }
+
+export const patrolsApi = {
+  list:   (params?: any) => api.get('/patrols', { params }),
+  get:    (id: string)   => api.get(`/patrols/${id}`),
+}
