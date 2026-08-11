@@ -373,12 +373,16 @@ export class MailService {
     const remainingAmount = totalAmount - paidAmount
     const formattedRemaining = new Intl.NumberFormat('fr-FR').format(remainingAmount)
 
-    // Generate PDF attachment
-    this.logger.log(`Generating PDF for ${inv.reference}...`)
-    const pdfBuffer = await this.generateInvoicePdf(inv, company, docType)
-    this.logger.log(`PDF generated (${(pdfBuffer.length / 1024).toFixed(1)} KB)`)
-
-    const fileName = `${docType.replace(/ /g, '_')}_${inv.reference}.pdf`
+    // Generate PDF attachment — fallback to no attachment if Puppeteer fails
+    let pdfBuffer: Buffer | null = null
+    let fileName = `${docType.replace(/ /g, '_')}_${inv.reference}.pdf`
+    try {
+      this.logger.log(`Generating PDF for ${inv.reference}...`)
+      pdfBuffer = await this.generateInvoicePdf(inv, company, docType)
+      this.logger.log(`PDF generated (${(pdfBuffer.length / 1024).toFixed(1)} KB)`)
+    } catch (pdfErr: any) {
+      this.logger.error(`PDF generation failed for ${inv.reference}: ${pdfErr?.message}`, pdfErr?.stack)
+    }
 
     // ─── Email body — customized based on invoice type and payment status ───
     const isProforma = inv.type === 'PROFORMA'
@@ -455,6 +459,10 @@ Service Administratif et Financier`
 
     const signatureService = isProforma ? 'Service Commercial' : 'Service Administratif et Financier'
 
+    const pdfNoteText = pdfBuffer
+      ? 'Le détail complet est disponible dans le fichier PDF ci-joint.'
+      : 'Le détail complet de ce document est disponible sur demande auprès de notre service administratif.'
+
     const htmlContent = `
 <!DOCTYPE html>
 <html>
@@ -479,7 +487,7 @@ Service Administratif et Financier`
       </p>
 
       <p style="font-size: 13px; color: #64748b; line-height: 1.5; margin: 0;">
-        Le détail complet est disponible dans le fichier PDF ci-joint.
+        ${pdfNoteText}
       </p>
     </div>
 
@@ -510,18 +518,19 @@ Service Administratif et Financier`
         'X-Mailer': 'SAGARD ERP',
         'X-Priority': '3',  // Normal priority
       },
-      attachments: [
-        {
-          filename: fileName,
-          content: pdfBuffer,
-          contentType: 'application/pdf',
-        },
-      ],
+      attachments: pdfBuffer
+        ? [{ filename: fileName, content: pdfBuffer, contentType: 'application/pdf' }]
+        : [],
     }
 
-    const info = await this.transporter.sendMail(mailOptions)
-    this.logger.log(`Email envoyé pour ${inv.reference} à ${destEmail} avec PDF joint (Message ID: ${info.messageId})`)
-    return { success: true, messageId: info.messageId, to: destEmail }
+    try {
+      const info = await this.transporter.sendMail(mailOptions)
+      this.logger.log(`Email envoyé pour ${inv.reference} à ${destEmail}${pdfBuffer ? ' avec PDF joint' : ' (sans PDF)'} (Message ID: ${info.messageId})`)
+      return { success: true, messageId: info.messageId, to: destEmail, hasAttachment: !!pdfBuffer }
+    } catch (smtpErr: any) {
+      this.logger.error(`SMTP error sending email to ${destEmail}: ${smtpErr?.message}`, smtpErr?.stack)
+      throw new BadRequestException(`Erreur d'envoi SMTP : ${smtpErr?.message || 'Erreur inconnue'}`)
+    }
   }
 
   /**
