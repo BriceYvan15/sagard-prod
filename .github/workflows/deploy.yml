@@ -61,14 +61,7 @@ jobs:
           # Créer/mettre à jour le .env pour la migration
           $SSH root@"$HOST" "echo 'DATABASE_URL=$DATABASE_URL' > /opt/sagard/api/packages/database/.env"
           # Créer/mettre à jour le .env de l'API (SMTP + DB)
-          $SSH root@"$HOST" "cat > /opt/sagard/api/apps/api/.env <<ENVEOF
-DATABASE_URL=$DATABASE_URL
-SMTP_HOST=$SMTP_HOST
-SMTP_PORT=$SMTP_PORT
-SMTP_USER=$SMTP_USER
-SMTP_PASS=$SMTP_PASS
-SMTP_FROM_NAME=$SMTP_FROM_NAME
-ENVEOF"
+          $SSH root@"$HOST" "printf 'DATABASE_URL=%s\nSMTP_HOST=%s\nSMTP_PORT=%s\nSMTP_USER=%s\nSMTP_PASS=%s\nSMTP_FROM_NAME=%s\n' '$DATABASE_URL' '$SMTP_HOST' '$SMTP_PORT' '$SMTP_USER' '$SMTP_PASS' '$SMTP_FROM_NAME' > /opt/sagard/api/apps/api/.env"
 
           # --- OPTIONNEL : à activer quand le package.json backend change (nouvelles dépendances) ---
           # rsync -az -e "$SSH" package.json pnpm-lock.yaml apps/api/package.json root@"$HOST":/opt/sagard/api/
