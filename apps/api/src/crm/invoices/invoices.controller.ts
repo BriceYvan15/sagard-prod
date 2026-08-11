@@ -149,7 +149,9 @@ export class InvoicesController {
     try {
       return await this.mailService.sendInvoiceEmail(id)
     } catch (err: any) {
-      console.error('[send-email] Error:', err?.message ?? err)
+      const status = err?.status ?? 500
+      const message = err?.message ?? 'Erreur lors de l\'envoi de l\'email'
+      console.error('[send-email] Error:', message, err?.stack)
       throw err
     }
   }
