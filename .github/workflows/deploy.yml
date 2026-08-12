@@ -60,8 +60,8 @@ jobs:
           rsync -az -e "$SSH" packages/database/prisma/ root@"$HOST":/opt/sagard/api/packages/database/prisma/
           # Créer/mettre à jour le .env pour la migration
           $SSH root@"$HOST" "echo 'DATABASE_URL=$DATABASE_URL' > /opt/sagard/api/packages/database/.env"
-          # Créer/mettre à jour le .env de l'API (SMTP + DB) — écrit aux deux emplacements possibles
-          $SSH root@"$HOST" "printf 'DATABASE_URL=%s\nSMTP_HOST=%s\nSMTP_PORT=%s\nSMTP_USER=%s\nSMTP_PASS=%s\nSMTP_FROM_NAME=%s\n' '$DATABASE_URL' '$SMTP_HOST' '$SMTP_PORT' '$SMTP_USER' '$SMTP_PASS' '$SMTP_FROM_NAME' | tee /opt/sagard/api/.env /opt/sagard/api/apps/api/.env > /dev/null"
+          # Mettre à jour les variables SMTP dans le .env de l'API (sans écraser les autres variables)
+          $SSH root@"$HOST" "cd /opt/sagard/api && touch .env && sed -i '/^SMTP_/d' .env && sed -i '/^DATABASE_URL=/d' .env && printf '\nDATABASE_URL=%s\nSMTP_HOST=%s\nSMTP_PORT=%s\nSMTP_USER=%s\nSMTP_PASS=%s\nSMTP_FROM_NAME=%s\n' '$DATABASE_URL' '$SMTP_HOST' '$SMTP_PORT' '$SMTP_USER' '$SMTP_PASS' '$SMTP_FROM_NAME' >> .env"
 
           # --- OPTIONNEL : à activer quand le package.json backend change (nouvelles dépendances) ---
           # rsync -az -e "$SSH" package.json pnpm-lock.yaml apps/api/package.json root@"$HOST":/opt/sagard/api/
