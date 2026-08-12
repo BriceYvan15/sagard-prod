@@ -60,12 +60,12 @@ jobs:
           rsync -az --delete -e "$SSH" apps/api/dist/ root@"$HOST":/opt/sagard/api/apps/api/dist/
           # Envoi du schéma Prisma et des migrations
           rsync -az -e "$SSH" packages/database/prisma/ root@"$HOST":/opt/sagard/api/packages/database/prisma/
-          # Créer/mettre à jour le .env pour la migration
-          $SSH root@"$HOST" "echo 'DATABASE_URL=$DATABASE_URL' > /opt/sagard/api/packages/database/.env"
-          # Recréer le .env complet de l'API (écrit aux deux emplacements possibles)
-          $SSH root@"$HOST" "printf 'DATABASE_URL=%s\nJWT_SECRET=%s\nPORT=%s\nNODE_ENV=production\nSMTP_HOST=%s\nSMTP_PORT=%s\nSMTP_USER=%s\nSMTP_PASS=%s\nSMTP_FROM_NAME=%s\n' '$DATABASE_URL' '$JWT_SECRET' '$API_PORT' '$SMTP_HOST' '$SMTP_PORT' '$SMTP_USER' '$SMTP_PASS' '$SMTP_FROM_NAME' | tee /opt/sagard/api/.env /opt/sagard/api/apps/api/.env > /dev/null"
-          # Debug: lire le backup .env et le .env.production pour trouver le bon DATABASE_URL
-          $SSH root@"$HOST" "echo '--- BACKUP .env ---'; cat /opt/sagard/api/apps/api/.env.bak-20260612-173601 2>/dev/null; echo '--- deploy .env.production ---'; cat /opt/sagard/deploy/.env.production 2>/dev/null; echo '--- PM2 logs (last 5 error) ---'; tail -5 /root/.pm2/logs/sagard-api-error.log 2>/dev/null"
+          # Créer/mettre à jour le .env pour la migration (extraire du backup)
+          $SSH root@"$HOST" "grep '^DATABASE_URL=' /opt/sagard/api/apps/api/.env.bak-20260612-173601 > /opt/sagard/api/packages/database/.env"
+          # Restaurer le .env depuis le backup, puis ajouter/mettre à jour les variables SMTP
+          $SSH root@"$HOST" "cp /opt/sagard/api/apps/api/.env.bak-20260612-173601 /opt/sagard/api/.env && sed -i '/^SMTP_/d' /opt/sagard/api/.env && printf '\nSMTP_HOST=%s\nSMTP_PORT=%s\nSMTP_USER=%s\nSMTP_PASS=%s\nSMTP_FROM_NAME=%s\n' '$SMTP_HOST' '$SMTP_PORT' '$SMTP_USER' '$SMTP_PASS' '$SMTP_FROM_NAME' >> /opt/sagard/api/.env && cp /opt/sagard/api/.env /opt/sagard/api/apps/api/.env"
+          # Vérification
+          $SSH root@"$HOST" "echo '--- .env restored ---'; cat /opt/sagard/api/.env | grep -v PASS | grep -v SECRET | grep -v DATABASE"
 
           # --- OPTIONNEL : à activer quand le package.json backend change (nouvelles dépendances) ---
           # rsync -az -e "$SSH" package.json pnpm-lock.yaml apps/api/package.json root@"$HOST":/opt/sagard/api/
