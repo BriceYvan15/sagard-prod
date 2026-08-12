@@ -64,8 +64,8 @@ jobs:
           $SSH root@"$HOST" "echo 'DATABASE_URL=$DATABASE_URL' > /opt/sagard/api/packages/database/.env"
           # Recréer le .env complet de l'API (écrit aux deux emplacements possibles)
           $SSH root@"$HOST" "printf 'DATABASE_URL=%s\nJWT_SECRET=%s\nPORT=%s\nNODE_ENV=production\nSMTP_HOST=%s\nSMTP_PORT=%s\nSMTP_USER=%s\nSMTP_PASS=%s\nSMTP_FROM_NAME=%s\n' '$DATABASE_URL' '$JWT_SECRET' '$API_PORT' '$SMTP_HOST' '$SMTP_PORT' '$SMTP_USER' '$SMTP_PASS' '$SMTP_FROM_NAME' | tee /opt/sagard/api/.env /opt/sagard/api/apps/api/.env > /dev/null"
-          # Vérifier et afficher le contenu (debug)
-          $SSH root@"$HOST" "echo '--- .env written ---'; cat /opt/sagard/api/.env | grep -v PASS | grep -v SECRET; echo '--- PM2 status ---'; pm2 describe sagard-api 2>/dev/null | grep -E 'cwd|script|status' || echo 'sagard-api not found in PM2'"
+          # Debug: chercher l'ancien DATABASE_URL dans les dumps PM2
+          $SSH root@"$HOST" "echo '--- PM2 dump DB URL ---'; cat /root/.pm2/dump.pm2 2>/dev/null | python3 -c \"import sys,json; data=json.load(sys.stdin); [print(p.get('pm2_env',{}).get('env',{}).get('DATABASE_URL','NOT_FOUND')) for p in data if p.get('name')=='sagard-api']\" 2>/dev/null || echo 'no dump'; echo '--- .env written ---'; cat /opt/sagard/api/.env | grep -v PASS | grep -v SECRET; echo '--- PM2 logs (last 15) ---'; pm2 logs sagard-api --nostream --lines 15 2>/dev/null"
 
           # --- OPTIONNEL : à activer quand le package.json backend change (nouvelles dépendances) ---
           # rsync -az -e "$SSH" package.json pnpm-lock.yaml apps/api/package.json root@"$HOST":/opt/sagard/api/
