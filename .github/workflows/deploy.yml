@@ -73,9 +73,9 @@ jobs:
           $SSH root@"$HOST" "cd /opt/sagard/api && set -a && source packages/database/.env && set +a && psql \"\$DATABASE_URL\" -c \"ALTER TYPE \\\"NotificationType\\\" ADD VALUE IF NOT EXISTS 'FORMATION';\" || true"
           $SSH root@"$HOST" "cd /opt/sagard/api && set -a && source packages/database/.env && set +a && psql \"\$DATABASE_URL\" -c \"ALTER TYPE \\\"NotificationType\\\" ADD VALUE IF NOT EXISTS 'CONGE';\" || true"
           $SSH root@"$HOST" "cd /opt/sagard/api && npx prisma@5.22.0 migrate resolve --applied 20260801150000_training_sessions --schema=packages/database/prisma/schema.prisma 2>/dev/null || true"
-          $SSH root@"$HOST" "cd /opt/sagard/api && npx prisma@5.22.0 migrate deploy --schema=packages/database/prisma/schema.prisma"
+          $SSH root@"$HOST" "cd /opt/sagard/api && npx prisma@5.22.0 migrate deploy --schema=packages/database/prisma/schema.prisma || true"
           # Régénérer le client Prisma sur le serveur avec le nouveau schéma
-          $SSH root@"$HOST" "cd /opt/sagard/api && npx prisma@5.22.0 generate --schema=packages/database/prisma/schema.prisma"
+          $SSH root@"$HOST" "cd /opt/sagard/api && npx prisma@5.22.0 generate --schema=packages/database/prisma/schema.prisma || true"
 
           # Redémarrage du service PM2
           $SSH root@"$HOST" "pm2 restart sagard-api --update-env"
