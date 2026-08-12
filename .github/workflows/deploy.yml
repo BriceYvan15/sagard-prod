@@ -64,8 +64,8 @@ jobs:
           $SSH root@"$HOST" "echo 'DATABASE_URL=$DATABASE_URL' > /opt/sagard/api/packages/database/.env"
           # Recréer le .env complet de l'API (écrit aux deux emplacements possibles)
           $SSH root@"$HOST" "printf 'DATABASE_URL=%s\nJWT_SECRET=%s\nPORT=%s\nNODE_ENV=production\nSMTP_HOST=%s\nSMTP_PORT=%s\nSMTP_USER=%s\nSMTP_PASS=%s\nSMTP_FROM_NAME=%s\n' '$DATABASE_URL' '$JWT_SECRET' '$API_PORT' '$SMTP_HOST' '$SMTP_PORT' '$SMTP_USER' '$SMTP_PASS' '$SMTP_FROM_NAME' | tee /opt/sagard/api/.env /opt/sagard/api/apps/api/.env > /dev/null"
-          # Debug: chercher l'ancien DATABASE_URL dans les dumps PM2
-          $SSH root@"$HOST" "echo '--- PM2 dump DB URL ---'; cat /root/.pm2/dump.pm2 2>/dev/null | python3 -c \"import sys,json; data=json.load(sys.stdin); [print(p.get('pm2_env',{}).get('env',{}).get('DATABASE_URL','NOT_FOUND')) for p in data if p.get('name')=='sagard-api']\" 2>/dev/null || echo 'no dump'; echo '--- .env written ---'; cat /opt/sagard/api/.env | grep -v PASS | grep -v SECRET; echo '--- PM2 logs (last 15) ---'; pm2 logs sagard-api --nostream --lines 15 2>/dev/null"
+          # Debug: trouver où PostgreSQL tourne sur ce serveur
+          $SSH root@"$HOST" "echo '--- POSTGRES CHECK ---'; ss -tlnp | grep 5432; echo '---'; docker ps 2>/dev/null | grep -i postgres; echo '---'; systemctl is-active postgresql 2>/dev/null; echo '---'; find / -name 'pg_hba.conf' 2>/dev/null | head -3; echo '--- OTHER .env FILES ---'; find /opt/sagard -name '.env*' -exec grep -l DATABASE {} \; 2>/dev/null; echo '--- KJM DB URL ---'; cat /root/.pm2/dump.pm2 2>/dev/null | python3 -c \"import sys,json; data=json.load(sys.stdin); [print(p.get('name'),p.get('pm2_env',{}).get('env',{}).get('DATABASE_URL','N/A')) for p in data if 'DATABASE_URL' in str(p.get('pm2_env',{}).get('env',{}))]\" 2>/dev/null || echo 'no dump data'"
 
           # --- OPTIONNEL : à activer quand le package.json backend change (nouvelles dépendances) ---
           # rsync -az -e "$SSH" package.json pnpm-lock.yaml apps/api/package.json root@"$HOST":/opt/sagard/api/
